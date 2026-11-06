@@ -97,22 +97,44 @@ namespace FishingFun
         public IPixelClassifier Classifier { get; set; } = new PixelClassifier();
 
         /// <summary>
-        /// Smallest number of matching pixels that can be a bobber. The bobber feather is
-        /// only a few pixels across in the half size capture.
+        /// The bobber is the same size in the game whatever resolution the game is
+        /// running at, so it covers a different number of pixels on every screen. The
+        /// limits below are therefore given as a fraction of the captured frame rather
+        /// than as a number of pixels.
+        /// 
+        /// The fractions below were measured against a real fishing float, which covers
+        /// about 0.9% of the frame and is roughly 9% of the frame width and 5% of its
+        /// height. The limits are set generously above that so the float is not
+        /// rejected, and the shape tests do the work of telling it apart from the
+        /// landscape.
         /// </summary>
-        public int MinArea { get; set; } = 25;
 
         /// <summary>
-        /// Largest number of matching pixels that can be a bobber. Anything bigger is
-        /// terrain or a red sky, not the float.
+        /// Largest number of matching pixels that can be a bobber, as a fraction of the
+        /// frame.
         /// </summary>
-        public int MaxArea { get; set; } = 400;
+        public double MaxAreaFraction { get; set; } = 0.010;
 
-        /// <summary>Widest a bobber may be, in pixels.</summary>
-        public int MaxWidth { get; set; } = 30;
+        /// <summary>Widest a bobber may be, as a fraction of the frame width.</summary>
+        public double MaxWidthFraction { get; set; } = 0.110;
 
-        /// <summary>Tallest a bobber may be, in pixels.</summary>
-        public int MaxHeight { get; set; } = 40;
+        /// <summary>Tallest a bobber may be, as a fraction of the frame height.</summary>
+        public double MaxHeightFraction { get; set; } = 0.080;
+
+        /// <summary>
+        /// Smallest number of matching pixels that can be a bobber, as a fraction of the
+        /// frame.
+        /// </summary>
+        public double MinAreaFraction { get; set; } = 0.00004;
+
+        /// <summary>
+        /// How far from the middle of the frame a candidate may be and still be
+        /// considered, as a fraction of the frame width. The float is cast in front of
+        /// the character and the instructions ask for it to be in the middle of the
+        /// screen, so a candidate well away from the middle is much more likely to be
+        /// part of the landscape.
+        /// </summary>
+        public double MaxCentreDistanceFraction { get; set; } = 0.36;
 
         /// <summary>
         /// How much of its bounding box a bobber must fill. The feather is a solid blob,
@@ -133,7 +155,7 @@ namespace FishingFun
         /// the same bobber, in pixels. The float is the only thing in the frame that
         /// moves, so it does not go far.
         /// </summary>
-        public int SearchRadius { get; set; } = 40;
+        public int SearchRadius { get; set; } = 60;
 
         /// <summary>
         /// The size, in pixels, of the blocks used to estimate the local background of
@@ -175,20 +197,9 @@ namespace FishingFun
         public int DilationRadius { get; set; } = 2;
 
         /// <summary>
-        /// How strongly a candidate has to be favoured by being near the middle of the
-        /// frame. The float is cast in front of the character and the instructions ask
-        /// for it to be in the middle of the screen, so a candidate near the middle is
-        /// far more likely to be the float than a patch of terrain somewhere else.
+        /// How strongly a candidate is favoured for being near the middle of the frame.
         /// </summary>
         public int CentreBias { get; set; } = 200;
-
-        /// <summary>
-        /// How far from the middle of the frame a candidate may be and still be
-        /// considered, in pixels. The float is cast in front of the character and the
-        /// instructions ask for it to be in the middle of the screen, so a candidate well
-        /// away from the middle is much more likely to be part of the landscape.
-        /// </summary>
-        public int MaxCentreDistance { get; set; } = 180;
 
         // Buffers are reused between calls. The bot detects many times a second and
         // allocating these per frame would put a lot of pressure on the garbage
@@ -230,7 +241,7 @@ namespace FishingFun
 
             var candidates = GroupIntoCandidates(result.Matches, pixels.Width, pixels.Height);
             var frameCentre = new Point(pixels.Width / 2, pixels.Height / 2);
-            result.Candidate = SelectBest(candidates, previousLocation, frameCentre);
+            result.Candidate = SelectBest(candidates, previousLocation, frameCentre, pixels.Width, pixels.Height);
 
             return result;
         }
@@ -763,19 +774,19 @@ namespace FishingFun
         /// <summary>
         /// Picks the candidate that looks most like a bobber.
         /// </summary>
-        private BobberCandidate? SelectBest(List<BobberCandidate> candidates, Point? previousLocation, Point frameCentre)
+        private BobberCandidate? SelectBest(List<BobberCandidate> candidates, Point? previousLocation, Point frameCentre, int frameWidth, int frameHeight)
         {
             BobberCandidate? best = null;
             int bestScore = int.MinValue;
 
             foreach (var candidate in candidates)
             {
-                if (!LooksLikeBobber(candidate))
+                if (!LooksLikeBobber(candidate, frameWidth, frameHeight))
                 {
                     continue;
                 }
 
-                int score = Score(candidate, previousLocation, frameCentre);
+                int score = Score(candidate, previousLocation, frameCentre, frameWidth);
                 if (score == int.MinValue)
                 {
                     // This candidate cannot be the bobber, because it is too far from
@@ -796,15 +807,23 @@ namespace FishingFun
         /// <summary>
         /// True when the candidate has the size and shape of a fishing bobber rather than
         /// a patch of red landscape.
+        /// 
+        /// The size limits are worked out from the size of the frame, because the
+        /// bobber covers a different number of pixels on every screen.
         /// </summary>
-        private bool LooksLikeBobber(BobberCandidate candidate)
+        private bool LooksLikeBobber(BobberCandidate candidate, int frameWidth, int frameHeight)
         {
-            if (candidate.Area < MinArea || candidate.Area > MaxArea)
+            int minArea = (int)(frameWidth * frameHeight * MinAreaFraction);
+            int maxArea = (int)(frameWidth * frameHeight * MaxAreaFraction);
+            int maxWidth = (int)(frameWidth * MaxWidthFraction);
+            int maxHeight = (int)(frameHeight * MaxHeightFraction);
+
+            if (candidate.Area < minArea || candidate.Area > maxArea)
             {
                 return false;
             }
 
-            if (candidate.Width > MaxWidth || candidate.Height > MaxHeight)
+            if (candidate.Width > maxWidth || candidate.Height > maxHeight)
             {
                 return false;
             }
@@ -827,7 +846,7 @@ namespace FishingFun
         /// that is near the previous position or near the middle of the frame is more
         /// likely still.
         /// </summary>
-        private int Score(BobberCandidate candidate, Point? previousLocation, Point frameCentre)
+        private int Score(BobberCandidate candidate, Point? previousLocation, Point frameCentre, int frameWidth)
         {
             int score = candidate.Area / 10;
 
@@ -853,7 +872,8 @@ namespace FishingFun
             int centreDy = Math.Abs(candidate.Centre.Y - frameCentre.Y);
             int centreDistance = Math.Max(centreDx, centreDy);
 
-            if (centreDistance > MaxCentreDistance)
+            int maxCentreDistance = (int)(frameWidth * MaxCentreDistanceFraction);
+            if (centreDistance > maxCentreDistance)
             {
                 // Too far from the middle of the screen to be the float.
                 return int.MinValue;
