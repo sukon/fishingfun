@@ -16,6 +16,9 @@
   <PropertyGroup>
     <LangVersion>8.0</LangVersion>
     <nullable>enable</nullable>
+    <!-- BobberDetector reads the captured frame through LockBits for speed, which needs
+         direct access to the pixel buffer. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -52,6 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Bot\BobberColourPointFinder.cs" />
+    <Compile Include="Bot\BobberDetector.cs" />
     <Compile Include="Bot\FishBot.cs" />
     <Compile Include="Bot\Interfaces\IBiteWatcher.cs" />
     <Compile Include="Bot\Interfaces\IBobberFinder.cs" />

@@ -1,9 +1,7 @@
-﻿using log4net;
+using log4net;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Linq;
 
 #nullable enable
 namespace FishingFun
@@ -11,6 +9,7 @@ namespace FishingFun
     public class SearchBobberFinder : IBobberFinder, IImageProvider
     {
         private readonly IPixelClassifier pixelClassifier;
+        private readonly BobberDetector detector;
 
         private static ILog logger = LogManager.GetLogger("Fishbot");
 
@@ -23,6 +22,7 @@ namespace FishingFun
         public SearchBobberFinder(IPixelClassifier pixelClassifier)
         {
             this.pixelClassifier = pixelClassifier;
+            this.detector = new BobberDetector { Classifier = pixelClassifier };
             BitmapEvent += (s, e) => { };
         }
 
@@ -35,108 +35,43 @@ namespace FishingFun
         {
             this.bitmap = WowScreen.GetBitmap();
 
-            Score? best = Score.ScorePoints(FindRedPoints());
+            var stopwatch = Stopwatch.StartNew();
 
-            if (previousLocation != Point.Empty && best == null)
+            // The detector reads the frame through LockBits instead of Bitmap.GetPixel,
+            // which is around ten times faster and keeps the detection rate high enough
+            // to notice the bobber moving.
+            Point? previous = this.previousLocation == Point.Empty ? (Point?)null : this.previousLocation;
+            var detection = this.detector.Find(this.bitmap, previous);
+
+            stopwatch.Stop();
+
+            // Show the user which pixels matched, the same as the previous implementation
+            // did, so the colour settings screen still makes sense.
+            this.detector.HighlightMatches(this.bitmap, detection.Matches, Color.Red);
+
+            Point found = detection.Candidate?.Centre ?? Point.Empty;
+
+            if (detection.UsedFallback)
             {
-                previousLocation = Point.Empty;
-                best = Score.ScorePoints(FindRedPoints());
+                logger.Info("The colour rule matched too much of the screen to be useful, so the bobber is being looked for by how it differs from the water behind it.");
             }
 
-            previousLocation = Point.Empty;
-            if (best != null)
+            if (found == Point.Empty)
             {
-                previousLocation = best.point;
+                logger.Info("No bobber found in this frame.");
+            }
+            else
+            {
+                logger.Info($"Bobber found at {found.X},{found.Y} in {stopwatch.ElapsedMilliseconds}ms.");
             }
 
-            BitmapEvent?.Invoke(this, new BobberBitmapEvent { Point = new Point(previousLocation.X, previousLocation.Y), Bitmap = this.bitmap });
+            this.previousLocation = found;
+
+            BitmapEvent?.Invoke(this, new BobberBitmapEvent { Point = new Point(found.X, found.Y), Bitmap = this.bitmap });
 
             this.bitmap.Dispose();
 
-            return previousLocation == Point.Empty ? Point.Empty : WowScreen.GetScreenPositionFromBitmapPostion(previousLocation);
-        }
-
-        private List<Score> FindRedPoints()
-        {
-            var points = new List<Score>();
-
-            var hasPreviousLocation = previousLocation != Point.Empty;
-
-            // search around last found location
-            var minX = Math.Max(hasPreviousLocation ? previousLocation.X - 40 : 0, 0);
-            var maxX = Math.Min(hasPreviousLocation ? previousLocation.X + 40 : this.bitmap.Width, this.bitmap.Width);
-            var minY = Math.Max(hasPreviousLocation ? previousLocation.Y - 40 : 0, 0);
-            var maxY = Math.Min(hasPreviousLocation ? previousLocation.Y + 40 : this.bitmap.Height, this.bitmap.Height);
-
-            //System.Diagnostics.Debug.WriteLine($"Search from X {minX}-{maxX}, Y {minY}-{maxY}");
-
-            Stopwatch sw = new Stopwatch();
-            sw.Start();
-
-            for (int x = minX; x < maxX; x++)
-            {
-                for (int y = minY; y < maxY; y++)
-                {
-                    ProcessPixel(points, x, y);
-                }
-            }
-            sw.Stop();
-
-            if (sw.ElapsedMilliseconds > 200)
-            {
-                var prevText = hasPreviousLocation ? " using previous location" : "";
-                Debug.WriteLine($"Red points found: {points.Count} in {sw.ElapsedMilliseconds}{prevText}.");
-            }
-
-            if (points.Count>1000)
-            {
-                logger.Error("Error: Too much red in this image, adjust the configuration !");
-                points.Clear();
-            }
-
-            return points;
-        }
-
-        private void ProcessPixel(List<Score> points, int x, int y)
-        {
-            var p = this.bitmap.GetPixel(x, y);
-
-            bool isMatch = this.pixelClassifier.IsMatch(p.R, p.G, p.B);
-
-            if (isMatch)
-            {
-                points.Add(new Score { point = new Point(x, y) });
-                this.bitmap.SetPixel(x, y, Color.Red);
-            }
-        }
-
-        private class Score
-        {
-            public Point point;
-            public int count = 0;
-
-            public static Score? ScorePoints(List<Score> points)
-            {
-                foreach (Score p in points)
-                {
-                    p.count = points.Where(s => Math.Abs(s.point.X - p.point.X) < 10) // + or - 10 pixels horizontally
-                        .Where(s => Math.Abs(s.point.Y - p.point.Y) < 10) // + or - 10 pixels vertically
-                        .Count();
-                }
-
-                var best = points.OrderByDescending(s => s.count).FirstOrDefault();
-
-                if (best != null)
-                {
-                    //System.Diagnostics.Debug.WriteLine($"best score: {best.count} at {best.point.X},{best.point.Y}");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine("No red found");
-                }
-
-                return best;
-            }
+            return found == Point.Empty ? Point.Empty : WowScreen.GetScreenPositionFromBitmapPosition(found);
         }
     }
 }

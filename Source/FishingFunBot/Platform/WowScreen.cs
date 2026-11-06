@@ -58,9 +58,17 @@ namespace FishingFun
             //return bmpScreen;
         }
 
-        public static Point GetScreenPositionFromBitmapPostion(Point pos)
+        public static Point GetScreenPositionFromBitmapPosition(Point pos)
         {
             return new Point(pos.X += wowWindowdBounds.Left + wowWindowdBounds.Width / 4, pos.Y += wowWindowdBounds.Top + wowWindowdBounds.Height / 4);
+        }
+
+        /// <summary>
+        /// Kept for backwards compatibility. The original name had a typo in it.
+        /// </summary>
+        public static Point GetScreenPositionFromBitmapPostion(Point pos)
+        {
+            return GetScreenPositionFromBitmapPosition(pos);
         }
     }
 }
