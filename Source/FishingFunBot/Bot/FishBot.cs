@@ -177,17 +177,31 @@ namespace FishingFun
 
             var timedTask = new TimedAction((a) => { logger.Info("Fishing timed out!"); }, 25 * 1000, 25);
 
+            // The float needs a moment to land and stop sinking before it can be
+            // watched for a bite. Biting during this time is not expected, so it is
+            // ignored rather than mistaken for a bite.
+            var castTime = DateTime.Now;
+
             // Wait for the bobber to move
             while (isEnabled)
             {
                 var currentBobberPosition = FindBobber();
-                if (currentBobberPosition == Point.Empty || currentBobberPosition.X == 0) { return; }
 
-                if (this.biteWatcher.IsBite(currentBobberPosition))
+                if (currentBobberPosition != Point.Empty && currentBobberPosition.X != 0)
                 {
-                    Loot(bobberPosition);
-                    PressTenMinKey();
-                    return;
+                    if (this.biteWatcher.IsBite(currentBobberPosition))
+                    {
+                        Loot(bobberPosition);
+                        PressTenMinKey();
+                        return;
+                    }
+                }
+                else
+                {
+                    // The float could not be seen in this frame. That happens while the
+                    // water is in the way of it. It says nothing about a bite, so the
+                    // bot keeps looking instead of giving up.
+                    logger.Info("Float not visible in this frame, still looking.");
                 }
 
                 if (!timedTask.ExecuteIfDue()) { return; }
@@ -250,15 +264,16 @@ namespace FishingFun
             }
         }
 
+        /// <summary>
+        /// Looks for the float once and gives up straight away if it cannot be seen.
+        /// 
+        /// The earlier version kept trying for five seconds. That meant the bot was
+        /// blind for up to five seconds at a time, and a fish biting during that time
+        /// was missed entirely. The caller decides whether to try again.
+        /// </summary>
         private Point FindBobber()
         {
-            var timer = new TimedAction((a) => { logger.Info("Waited seconds for target: " + a.ElapsedSecs); }, 1000, 5);
-
-            while (true)
-            {
-                var target = this.bobberFinder.Find();
-                if (target != Point.Empty || !timer.ExecuteIfDue()) { return target; }
-            }
+            return this.bobberFinder.Find();
         }
     }
 }
