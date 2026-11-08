@@ -1,5 +1,4 @@
-﻿using System.IO;
-using System.Windows;
+﻿using System.Windows;
 
 namespace FishingFun
 {
@@ -7,7 +6,7 @@ namespace FishingFun
     {
         public App()
         {
-            log4net.Config.XmlConfigurator.Configure(new FileStream("log4net.config", FileMode.Open));
+            FishingFun.LoggingSetup.Configure();
         }
     }
 }

@@ -24,6 +24,9 @@ namespace FishingFun
             try
             {
                 writer.WriteLine(Header);
+                // The recording is only made when it is asked for, so it is written as it
+                // happens. That keeps the file readable while it is still open, which is
+                // what the replay tool expects.
                 writer.AutoFlush = true;
             }
             catch
@@ -35,6 +38,13 @@ namespace FishingFun
 
         public static BobberTraceRecorder? TryCreate(long startedAt, string? directory = null)
         {
+            // Recording writes a file for every cast, so it is only done when it is
+            // asked for. The bot itself does not need it.
+            if (!BotConfig.RecordFloatTraces)
+            {
+                return null;
+            }
+
             try
             {
                 directory = directory ?? System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp", "bite-traces");
@@ -100,7 +110,12 @@ namespace FishingFun
         {
             var stream = writer;
             writer = null;
-            try { stream?.Dispose(); }
+            try
+            {
+                // Flush before closing, so that the last rows are on disk.
+                stream?.Flush();
+                stream?.Dispose();
+            }
             catch (IOException error) { logger.Info("Float observation recording close failed: " + error.Message); }
         }
     }

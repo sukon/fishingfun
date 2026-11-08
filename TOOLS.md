@@ -5,6 +5,7 @@
 | Capability | Tool / Procedure | Path / Command | Notes |
 | --- | --- | --- | --- |
 | Bite detection regression | Position replay | `tests/Run-BiteWatcherRegression.ps1` | No game or restored packages required |
+| Disk write reduction regression | Settings and log behaviour | `tests/Run-WriteReductionRegression.ps1` | No game or restored packages required |
 | Observation capture and replay | Per-cast CSV and offline watcher replay | `tools/Replay-BiteTrace.ps1`, `tools/BobberReplay.cs` | Position, size, area, missing frames and monotonic time |
 | Raw image capture and inspection | Live/offline detector diagnostic | `tools/Inspect-Bobber.ps1`, `tools/BobberDiagnostic.cs` | Read-only capture; raw pixels, overlays and rejection report |
 | Release build | Restore packages and MSBuild | `tools/Build-Release.ps1` | Downloads project-local .NET Framework 4.7.2 reference assemblies |
@@ -93,3 +94,44 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 **Requirements:** Visual Studio 2022 MSBuild, Windows .NET Framework, and HTTPS access to `api.nuget.org` for packages not already restored. No system-wide targeting-pack installation is required.
 
 **Notes / constraints:** The script stops on download or build failure. If NuGet DNS resolution fails, restore network access before retrying. With a system-wide targeting pack and packages already installed, the original developer-shell command also works: `MSBuild Source/FishingFun.sln /t:Build /p:Configuration=Release /verbosity:minimal /nologo`. Position regression tests can run independently using the installed Framework runtime.
+
+### Disk write settings
+
+**Purpose:** Decide how much the bot writes to disk, so a machine that fishes all day does not keep the drive busy.
+
+**Path / command:** `Source/FishingFunBot/Bot/BotConfig.cs` and `LoggingSetup.cs`; sample settings file `fishingfun.config.sample`.
+
+**Use when:** The log file grows quickly, the drive should be left alone, or the float observation recording is not wanted.
+
+**Usage:** Copy `fishingfun.config.sample` next to the program as `fishingfun.config`, or set environment variables, which take priority over the file:
+
+```bat
+set FISHINGFUN_LOG_FILE_THRESHOLD=WARN
+set FISHINGFUN_RECORD_FLOAT_TRACES=1
+```
+
+**Inputs / arguments:** `log_to_file`, `log_file_threshold`, `log_file_immediate_flush`, `log_file_max_size_mb`, `log_file_backups`, `record_float_traces`. A value that cannot be understood is ignored and the default is kept.
+
+**Outputs:** `myapp.log` next to the program, and the float observation recordings under `temp/bite-traces/` when they are switched on. The user interface and the console still show every message, whatever the file is set to.
+
+**Requirements:** None beyond the program itself.
+
+**Notes / constraints:** The log file only keeps the levels named by `log_file_threshold`, so the per frame messages stay on screen but do not reach the disk. `log_file_immediate_flush=false` batches the writes, which is gentler on the drive, but the tail of the log is then only written when the program closes the file, so a program that is killed loses that last part; it is on by default for that reason. **The float observation recording is off by default**, which is a change from earlier versions: it created a file for every cast and wrote a row for every frame. Set `record_float_traces=true` to bring it back; existing recordings are not affected.
+
+### Disk write reduction regression
+
+**Purpose:** Check that the disk write settings behave as described.
+
+**Path / command:** `tests/Run-WriteReductionRegression.ps1`
+
+**Use when:** Changing `BotConfig` or `LoggingSetup`.
+
+**Usage:** `powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-WriteReductionRegression.ps1`
+
+**Inputs / arguments:** None.
+
+**Outputs:** PASS/FAIL lines and nonzero exit on failure.
+
+**Requirements:** Windows .NET Framework and Visual Studio 2022 C# compiler.
+
+**Notes / constraints:** Checks that switching file logging off creates no file at all, that the threshold applies to the file but not to the screen, that a normal exit keeps the last lines, that the log rolls over, and that the environment beats the settings file while a bad value is ignored.

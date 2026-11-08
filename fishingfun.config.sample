@@ -1,0 +1,49 @@
+# Fishing Fun - settings
+#
+# Copy this file next to the program as "fishingfun.config" and change
+# what you need. The file is optional; without it the defaults below apply.
+#
+# Settings can also be given as environment variables, which take priority
+# over this file. That is useful on a machine where you would rather not
+# edit a file:
+#
+#   set FISHINGFUN_LOG_FILE_THRESHOLD=WARN
+#   set FISHINGFUN_RECORD_FLOAT_TRACES=1
+#
+# A setting that cannot be understood is ignored and the default is used,
+# so a typo here cannot stop the program from starting.
+
+# Whether messages are written to the log file at all.
+# When this is false the file is never created, not even an empty one.
+# The messages still appear on screen and in the console.
+# Default: true
+log_to_file = true
+
+# The lowest level that reaches the log file: ALL, DEBUG, INFO, WARN,
+# ERROR, FATAL, OFF.
+# INFO is where the per frame messages are, so WARN keeps the drive quiet
+# while still recording anything that went wrong.
+# Default: WARN
+log_file_threshold = WARN
+
+# Whether each log line is pushed to the disk as it happens.
+# false batches the writes, which is gentler on the drive, but the tail of
+# the log is then only written when the program closes the file. A program
+# that is killed rather than closed loses that last part.
+# Default: true
+log_file_immediate_flush = true
+
+# How large the log file may grow before it is rolled over, in megabytes.
+# Default: 10
+log_file_max_size_mb = 10
+
+# How many rolled over log files are kept.
+# Default: 5
+log_file_backups = 5
+
+# Whether the float observation recording is written. It creates a file for
+# every cast and adds a row for every frame, so it is off by default.
+# Turn it on when you want to record what the bot saw, for instance to
+# replay it later with tools\Replay-BiteTrace.ps1.
+# Default: false
+record_float_traces = false

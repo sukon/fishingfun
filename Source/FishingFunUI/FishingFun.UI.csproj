@@ -177,9 +177,6 @@
     <None Include="App.config" />
     <!-- App.xaml.cs loads this file at startup and throws if it is missing,
          so it must be copied next to the executable. -->
-    <None Include="log4net.config">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Resources\FishingFun.png" />

@@ -226,6 +226,9 @@ class BiteWatcherRegression
         foreach (string fixture in Directory.GetFiles(args[0], "*.csv"))
             Check(Replay(fixture) == -1, "real logged no-bite replay " + Path.GetFileName(fixture));
 
+        // The float observation recording is off by default so that a long fishing
+        // session does not keep writing to the drive. Switch it on to exercise it.
+        BotConfig.RecordFloatTraces = true;
         var initial = At(5000, height: 10);
         using (var recorder = BobberTraceRecorder.TryCreate(5000, args[1]))
         {
@@ -243,6 +246,9 @@ class BiteWatcherRegression
         }
         Check(BobberTraceRecorder.TryCreate(0, args[2]) == null,
             "unwritable recording location does not stop detection");
+        BotConfig.RecordFloatTraces = false;
+        Check(BobberTraceRecorder.TryCreate(0, args[1]) == null,
+            "the recording stays off unless it is asked for");
         return failures == 0 ? 0 : 1;
     }
 }

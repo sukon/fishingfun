@@ -59,12 +59,14 @@
     <Compile Include="Bot\BobberObservation.cs" />
     <Compile Include="Bot\BobberTraceRecorder.cs" />
     <Compile Include="Bot\BobberTracker.cs" />
+    <Compile Include="Bot\BotConfig.cs" />
     <Compile Include="Bot\FishBot.cs" />
     <Compile Include="Bot\Interfaces\IBiteWatcher.cs" />
     <Compile Include="Bot\Interfaces\IBobberFinder.cs" />
     <Compile Include="Bot\Interfaces\IImageProvider.cs" />
     <Compile Include="Bot\Interfaces\IPixelClassifier.cs" />
     <Compile Include="Bot\Lure.cs" />
+    <Compile Include="Bot\LoggingSetup.cs" />
     <Compile Include="Bot\PixelClassifier.cs" />
     <Compile Include="Bot\PositionBiteWatcher.cs" />
     <Compile Include="Bot\SearchBobberFinder.cs" />

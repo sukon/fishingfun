@@ -10,7 +10,7 @@ namespace Powershell
     {
         private static void Main(string[] args)
         {
-            log4net.Config.XmlConfigurator.Configure(new FileStream("log4net.config", FileMode.Open));
+            FishingFun.LoggingSetup.Configure();
 
             int strikeValue = 5;
 
