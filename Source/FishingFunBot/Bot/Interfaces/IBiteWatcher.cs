@@ -5,9 +5,11 @@ namespace FishingFun
 {
     public interface IBiteWatcher
     {
-        void Reset(Point InitialBobberPosition);
+        // Reset once per cast. Observations must use the same coordinate system
+        // and a monotonic millisecond timeline for both live detection and replay.
+        void Reset(BobberObservation initialObservation);
 
-        bool IsBite(Point currentBobberPosition);
+        bool IsBite(BobberObservation observation);
 
         Action<FishingEvent> FishingEventHandler { set; get; }
     }

@@ -10,10 +10,9 @@ namespace FishingFun
     {
         private readonly IPixelClassifier pixelClassifier;
         private readonly BobberDetector detector;
+        private readonly BobberTracker tracker;
 
         private static ILog logger = LogManager.GetLogger("Fishbot");
-
-        private Point previousLocation;
 
         private Bitmap bitmap = new Bitmap(1, 1);
 
@@ -23,25 +22,26 @@ namespace FishingFun
         {
             this.pixelClassifier = pixelClassifier;
             this.detector = new BobberDetector { Classifier = pixelClassifier };
+            this.tracker = new BobberTracker(this.detector);
             BitmapEvent += (s, e) => { };
         }
 
         public void Reset()
         {
-            this.previousLocation = Point.Empty;
+            this.tracker.Reset();
         }
 
-        public Point Find()
+        public BobberObservation Find()
         {
             this.bitmap = WowScreen.GetBitmap();
+            long capturedAt = BobberObservation.NowMilliseconds;
 
             var stopwatch = Stopwatch.StartNew();
 
             // The detector reads the frame through LockBits instead of Bitmap.GetPixel,
             // which is around ten times faster and keeps the detection rate high enough
             // to notice the bobber moving.
-            Point? previous = this.previousLocation == Point.Empty ? (Point?)null : this.previousLocation;
-            var detection = this.detector.Find(this.bitmap, previous);
+            var detection = this.tracker.Find(this.bitmap, capturedAt);
 
             stopwatch.Stop();
 
@@ -50,6 +50,11 @@ namespace FishingFun
             this.detector.HighlightMatches(this.bitmap, detection.Matches, Color.Red);
 
             Point found = detection.Candidate?.Centre ?? Point.Empty;
+            var candidate = detection.Candidate;
+            var observation = candidate == null
+                ? BobberObservation.Missing(capturedAt)
+                : new BobberObservation(WowScreen.GetScreenPositionFromBitmapPosition(found),
+                    new Size(candidate.Width, candidate.Height), candidate.Area, capturedAt);
 
             if (detection.UsedFallback)
             {
@@ -62,16 +67,14 @@ namespace FishingFun
             }
             else
             {
-                logger.Info($"Bobber found at {found.X},{found.Y} in {stopwatch.ElapsedMilliseconds}ms.");
+                logger.Info($"Bobber found at {found.X},{found.Y}, size {observation.Size.Width}x{observation.Size.Height}, area {observation.Area}, in {stopwatch.ElapsedMilliseconds}ms.");
             }
-
-            this.previousLocation = found;
 
             BitmapEvent?.Invoke(this, new BobberBitmapEvent { Point = new Point(found.X, found.Y), Bitmap = this.bitmap });
 
             this.bitmap.Dispose();
 
-            return found == Point.Empty ? Point.Empty : WowScreen.GetScreenPositionFromBitmapPosition(found);
+            return observation;
         }
     }
 }

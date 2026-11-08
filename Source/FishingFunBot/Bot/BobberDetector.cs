@@ -55,6 +55,12 @@ namespace FishingFun
         public BobberCandidate? Candidate { get; set; }
 
         /// <summary>
+        /// A sparse/small shape that needs confirmation across frames before it
+        /// can establish a new track. It is never a confirmed detection by itself.
+        /// </summary>
+        public BobberCandidate? TentativeCandidate { get; set; }
+
+        /// <summary>
         /// Every pixel that matched, so the user interface can show what the detector
         /// saw.
         /// </summary>
@@ -141,6 +147,13 @@ namespace FishingFun
         /// whereas red terrain usually covers its bounding box unevenly.
         /// </summary>
         public double MinFillRatio { get; set; } = 0.35;
+
+        /// <summary>
+        /// Water and splash break the already identified feather into a sparse
+        /// shape. Only a candidate within the tracking radius may use this lower
+        /// fill requirement; first acquisition keeps the stricter shape test.
+        /// </summary>
+        public double TrackingMinFillRatio { get; set; } = 0.20;
 
         /// <summary>
         /// How solid a bobber has to be. The feather is a filled shape, so eroding it by
@@ -242,6 +255,8 @@ namespace FishingFun
             var candidates = GroupIntoCandidates(result.Matches, pixels.Width, pixels.Height);
             var frameCentre = new Point(pixels.Width / 2, pixels.Height / 2);
             result.Candidate = SelectBest(candidates, previousLocation, frameCentre, pixels.Width, pixels.Height);
+            if (result.Candidate == null && !previousLocation.HasValue)
+                result.TentativeCandidate = SelectBest(candidates, null, frameCentre, pixels.Width, pixels.Height, allowSparse: true);
 
             return result;
         }
@@ -774,14 +789,14 @@ namespace FishingFun
         /// <summary>
         /// Picks the candidate that looks most like a bobber.
         /// </summary>
-        private BobberCandidate? SelectBest(List<BobberCandidate> candidates, Point? previousLocation, Point frameCentre, int frameWidth, int frameHeight)
+        private BobberCandidate? SelectBest(List<BobberCandidate> candidates, Point? previousLocation, Point frameCentre, int frameWidth, int frameHeight, bool allowSparse = false)
         {
             BobberCandidate? best = null;
             int bestScore = int.MinValue;
 
             foreach (var candidate in candidates)
             {
-                if (!LooksLikeBobber(candidate, frameWidth, frameHeight))
+                if (!LooksLikeBobber(candidate, frameWidth, frameHeight, previousLocation.HasValue || allowSparse))
                 {
                     continue;
                 }
@@ -811,9 +826,10 @@ namespace FishingFun
         /// The size limits are worked out from the size of the frame, because the
         /// bobber covers a different number of pixels on every screen.
         /// </summary>
-        private bool LooksLikeBobber(BobberCandidate candidate, int frameWidth, int frameHeight)
+        private bool LooksLikeBobber(BobberCandidate candidate, int frameWidth, int frameHeight, bool isTracking)
         {
             int minArea = (int)(frameWidth * frameHeight * MinAreaFraction);
+            if (isTracking) minArea = Math.Max(6, Math.Min(minArea, 8));
             int maxArea = (int)(frameWidth * frameHeight * MaxAreaFraction);
             int maxWidth = (int)(frameWidth * MaxWidthFraction);
             int maxHeight = (int)(frameHeight * MaxHeightFraction);
@@ -828,7 +844,7 @@ namespace FishingFun
                 return false;
             }
 
-            if (candidate.FillRatio < MinFillRatio)
+            if (candidate.FillRatio < (isTracking ? TrackingMinFillRatio : MinFillRatio))
             {
                 return false;
             }

@@ -16,9 +16,10 @@ namespace FishingFun
 
         public event EventHandler<BobberBitmapEvent> BitmapEvent;
 
-        public Point Find()
+        public BobberObservation Find()
         {
             this.bmp = WowScreen.GetBitmap();
+            long capturedAt = BobberObservation.NowMilliseconds;
 
             const int targetOffset = 15;
 
@@ -51,14 +52,16 @@ namespace FishingFun
                         colorAt.G < targetGreenHb)
                     {
                         BitmapEvent?.Invoke(this, new BobberBitmapEvent { Point = new Point(i, j), Bitmap = bmp });
-                        return WowScreen.GetScreenPositionFromBitmapPostion(pos);
+                        // This legacy finder identifies one pixel, not a shape, so
+                        // leave the size unknown rather than inventing a measurement.
+                        return new BobberObservation(WowScreen.GetScreenPositionFromBitmapPostion(pos), Size.Empty, 0, capturedAt);
                     }
                 }
             }
 
             BitmapEvent?.Invoke(this, new BobberBitmapEvent { Point = Point.Empty, Bitmap = bmp });
             bmp.Dispose();
-            return Point.Empty;
+            return BobberObservation.Missing(capturedAt);
         }
 
         public Bitmap GetBitmap()

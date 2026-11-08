@@ -49,6 +49,14 @@ Or compile the source and run it from visual studio.
 * Fish at ground level, not off docks or other high places.
 * It requires that WOW is running on the primary screen. It needs the wow screen to be on top. So it probably won't work well if you only have one screen.
 
+### Per-cast calibration and diagnostics
+
+After locating the float, the bot collects at least six visible observations spanning one second before enabling bite detection. It learns the float's median height and ordinary motion for that cast. Small floats can use a lower displacement threshold (20% of height, with a two-pixel floor); large floats retain the working six-pixel setting. A bite must also move sharply relative to the learned ordinary motion. Short dropouts retain the track and learned calibration for up to two seconds; a long gap or a large sideways jump restarts calibration.
+
+An already tracked float can remain recognizable when splash makes its feather sparse. Small or sparse shapes found without an existing track require three consistent frames before being accepted, while the solidity and search-distance checks still reject thin background edges and unrelated distant shapes.
+
+Each cast writes a small CSV of positions, sizes, area, time and original decisions under `temp/bite-traces/` next to the executable. See [TOOLS.md](TOOLS.md) for offline replay, raw image capture and regression commands. Actual splash images are included in the regression fixtures; automatic collection and other cast distances still require in-game validation.
+
 ----
 
 ## All about the bot

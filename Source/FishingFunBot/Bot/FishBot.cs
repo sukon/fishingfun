@@ -165,38 +165,35 @@ namespace FishingFun
         {
             bobberFinder.Reset();
 
-            var bobberPosition = FindBobber();
-            if (bobberPosition == Point.Empty)
-            {
-                return;
-            }
-
-            this.biteWatcher.Reset(bobberPosition);
-
-            logger.Info("Bobber start position: " + bobberPosition);
-
             var timedTask = new TimedAction((a) => { logger.Info("Fishing timed out!"); }, 25 * 1000, 25);
+            var observation = FindBobber();
+            while (isEnabled && !observation.IsVisible)
+            {
+                if (!timedTask.ExecuteIfDue()) return;
+                observation = FindBobber();
+            }
+            if (!isEnabled) return;
 
-            // The float needs a moment to land and stop sinking before it can be
-            // watched for a bite. Biting during this time is not expected, so it is
-            // ignored rather than mistaken for a bite.
-            var castTime = DateTime.Now;
+            this.biteWatcher.Reset(observation);
+            using var trace = BobberTraceRecorder.TryCreate(observation.TimestampMilliseconds);
+            trace?.Record(observation, "reset");
+
+            logger.Info("Bobber start position: " + observation.Position);
 
             // Wait for the bobber to move
             while (isEnabled)
             {
-                var currentBobberPosition = FindBobber();
+                observation = FindBobber();
+                bool isBite = this.biteWatcher.IsBite(observation);
+                trace?.Record(observation, isBite ? "bite" : "watch");
 
-                if (currentBobberPosition != Point.Empty && currentBobberPosition.X != 0)
+                if (isBite)
                 {
-                    if (this.biteWatcher.IsBite(currentBobberPosition))
-                    {
-                        Loot(bobberPosition);
-                        PressTenMinKey();
-                        return;
-                    }
+                    Loot(observation.Position);
+                    PressTenMinKey();
+                    return;
                 }
-                else
+                if (!observation.IsVisible)
                 {
                     // The float could not be seen in this frame. That happens while the
                     // water is in the way of it. It says nothing about a bite, so the
@@ -271,7 +268,7 @@ namespace FishingFun
         /// blind for up to five seconds at a time, and a fish biting during that time
         /// was missed entirely. The caller decides whether to try again.
         /// </summary>
-        private Point FindBobber()
+        private BobberObservation FindBobber()
         {
             return this.bobberFinder.Find();
         }

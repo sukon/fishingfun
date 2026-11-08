@@ -1,0 +1,6 @@
+elapsed_ms,x,y,width,height,area,decision
+0,807,353,0,0,0,reset
+185,807,353,0,0,0,watch
+385,806,354,0,0,0,watch
+583,804,357,0,0,0,watch
+785,801,361,0,0,0,watch

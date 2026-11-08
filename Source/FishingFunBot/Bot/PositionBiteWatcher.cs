@@ -1,146 +1,181 @@
 using log4net;
 using System;
-using System.Drawing;
+using System.Collections.Generic;
 
 #nullable enable
 namespace FishingFun
 {
     /// <summary>
-    /// Works out whether the float has been pulled under by a fish.
-    /// 
-    /// The float floats on the surface and drifts. When a fish bites it is pulled down
-    /// sharply. The trouble is telling the two apart, because a float that has just
-    /// landed keeps sinking gently, a pixel or two a frame, and that goes on for a
-    /// while.
-    /// 
-    /// A bite must move down sharply since the last observation as well as fall
-    /// below the moving reference. Distance from the reference alone is insufficient:
-    /// ordinary three- or four-pixel drift can build up enough lag to cross it.
+    /// Learns the visible size and ordinary motion of each cast before watching for
+    /// a sharp downward movement. Live detection and replay use the same observations.
     /// </summary>
     public class PositionBiteWatcher : IBiteWatcher
     {
-        private static ILog logger = LogManager.GetLogger("Fishbot");
-
-        /// <summary>
-        /// How far the float has to be pulled under before it counts as a bite, in pixels.
-        /// </summary>
-        private readonly int strikeValue;
-
-        /// <summary>
-        /// How far the float has to move away from where it was expected to be, in
-        /// pixels, before it counts as a bite. This is what tells a float being pulled
-        /// under apart from one that is drifting, because a drifting float is followed
-        /// closely and never gets this far away.
-        /// </summary>
-        private readonly int biteThreshold;
-
-        /// <summary>
-        /// How much of each observed movement the expected position follows.
-        /// A separate per-observation drop check prevents tracking lag from
-        /// turning gradual motion into a bite.
-        /// </summary>
+        private static readonly ILog logger = LogManager.GetLogger("Fishbot");
+        private const int CalibrationMilliseconds = 1000;
+        private const int MinimumCalibrationSamples = 6;
+        private const int MaximumObservationGapMilliseconds = 2000;
+        private const int ContinuousObservationMilliseconds = 1000;
+        private const int MotionHistoryLength = 30;
+        private const double ReferenceIntervalMilliseconds = 200;
+        private readonly int maximumThreshold;
         private readonly double followFactor;
-
-        /// <summary>
-        /// Where the float is expected to be, worked out from how it has been moving.
-        /// </summary>
+        private readonly List<double> heights = new List<double>();
+        private readonly List<double> normalSpeeds = new List<double>();
+        private BobberObservation? previous;
+        private long calibrationStart;
+        private long lastTimestamp;
+        private int calibrationSamples;
         private double expectedY;
-
-        /// <summary>
-        /// True once the float has been seen at least once, so there is something to
-        /// work from.
-        /// </summary>
-        private bool hasExpected;
-
-        /// <summary>
-        /// The previous observed position, used to distinguish a sharp drop from
-        /// distance accumulated through gradual drift.
-        /// </summary>
-        private int previousY;
-
-        /// <summary>
-        /// True once the float has been pulled far enough down to count as a bite.
-        /// </summary>
         private bool biteDetected;
 
-        public Action<FishingEvent> FishingEventHandler { set; get; } = (e) => { };
+        public bool IsCalibrated { get; private set; }
+        public double CalibratedHeight { get; private set; }
+        public double ThresholdPixels { get; private set; }
+        public Action<FishingEvent> FishingEventHandler { get; set; } = e => { };
 
         public PositionBiteWatcher(int strikeValue)
-            : this(strikeValue, biteThreshold: 6, followFactor: 0.4)
-        {
-        }
+            : this(strikeValue, biteThreshold: 6, followFactor: 0.4) { }
 
         public PositionBiteWatcher(int strikeValue, int biteThreshold, double followFactor)
         {
-            this.strikeValue = strikeValue;
-            this.biteThreshold = biteThreshold;
+            if (strikeValue <= 0 || biteThreshold <= 0)
+                throw new ArgumentOutOfRangeException(nameof(strikeValue));
+            if (double.IsNaN(followFactor) || followFactor <= 0 || followFactor > 1)
+                throw new ArgumentOutOfRangeException(nameof(followFactor));
+            maximumThreshold = Math.Max(strikeValue, biteThreshold);
             this.followFactor = followFactor;
+            ThresholdPixels = maximumThreshold;
         }
 
-        public void RaiseEvent(FishingEvent ev)
+        public void Reset(BobberObservation initialObservation)
         {
-            FishingEventHandler?.Invoke(ev);
-        }
-
-        /// <summary>
-        /// Called when the float has been cast and found.
-        /// </summary>
-        public void Reset(Point InitialBobberPosition)
-        {
-            RaiseEvent(new FishingEvent { Action = FishingAction.Reset });
-
-            expectedY = InitialBobberPosition.Y;
-            hasExpected = true;
-            previousY = InitialBobberPosition.Y;
             biteDetected = false;
+            BeginCalibration(initialObservation);
+            FishingEventHandler?.Invoke(new FishingEvent { Action = FishingAction.Reset });
         }
 
-        /// <summary>
-        /// Feeds in the position the float was seen at. Returns true when it looks like a
-        /// fish has bitten.
-        /// </summary>
-        public bool IsBite(Point currentBobberPosition)
+        private void BeginCalibration(BobberObservation observation)
         {
-            if (biteDetected)
-            {
-                return true;
-            }
+            IsCalibrated = false;
+            CalibratedHeight = 0;
+            ThresholdPixels = maximumThreshold;
+            heights.Clear();
+            normalSpeeds.Clear();
+            calibrationStart = observation.TimestampMilliseconds;
+            lastTimestamp = observation.TimestampMilliseconds;
+            previous = observation.IsVisible ? observation : null;
+            calibrationSamples = observation.IsVisible ? 1 : 0;
+            expectedY = observation.Position.Y;
+            AddHeight(observation);
+        }
 
-            int currentY = currentBobberPosition.Y;
+        public bool IsBite(BobberObservation observation)
+        {
+            if (biteDetected) return true;
+            if (observation.TimestampMilliseconds <= lastTimestamp) return false;
+            lastTimestamp = observation.TimestampMilliseconds;
+            if (!observation.IsVisible) return false;
 
-            if (!hasExpected)
+            var last = previous;
+            if (last == null)
             {
-                expectedY = currentY;
-                previousY = currentY;
-                hasExpected = true;
+                BeginCalibration(observation);
                 return false;
             }
 
-            // Where the float would be if it had kept moving the way it has been
-            // moving. The expected position follows the float, but only part of the
-            // way, so a float being pulled under cannot be followed.
-            //
-            // The y axis grows downwards, so a float that has been pulled under has a
-            // larger y than where it was expected to be.
-            double movement = currentY - expectedY;
-            // Measure before following. Following first attenuates a seven-pixel
-            // bite to four pixels and hides it below the detection threshold.
-            int drop = (int)Math.Round(movement);
-            int frameDrop = currentY - previousY;
-            previousY = currentY;
+            long elapsed = observation.TimestampMilliseconds - last.TimestampMilliseconds;
+            int horizontalMovement = Math.Abs(observation.Position.X - last.Position.X);
+            int maximumHorizontalMovement = Math.Max(12, last.Size.Width * 2);
+            if (elapsed > MaximumObservationGapMilliseconds || horizontalMovement > maximumHorizontalMovement)
+            {
+                // A long gap or a jump to a different object cannot establish a bite.
+                BeginCalibration(observation);
+                return false;
+            }
 
-            int threshold = Math.Max(strikeValue, biteThreshold);
-            if (drop >= threshold && frameDrop >= threshold)
+            double frameDrop = observation.Position.Y - last.Position.Y;
+            double speed = Math.Abs(frameDrop) * 1000.0 / elapsed;
+            previous = observation;
+
+            if (IsCalibrated && elapsed > ContinuousObservationMilliseconds)
+            {
+                // Keep this cast's learned appearance and motion through a brief
+                // dropout. Reappearance itself is not evidence of a sharp drop.
+                expectedY = observation.Position.Y;
+                return false;
+            }
+
+            if (!IsCalibrated)
+            {
+                calibrationSamples++;
+                AddHeight(observation);
+                AddNormalSpeed(speed);
+                expectedY = observation.Position.Y;
+                if (calibrationSamples >= MinimumCalibrationSamples &&
+                    observation.TimestampMilliseconds - calibrationStart >= CalibrationMilliseconds)
+                {
+                    CalibratedHeight = heights.Count == 0 ? 0 : Median(heights);
+                    // Keep the working six-pixel setting for large floats. Smaller
+                    // floats use 20% of their height, with a two-pixel noise floor.
+                    // Freeze size here so submersion cannot lower the threshold.
+                    ThresholdPixels = CalibratedHeight > 0
+                        ? Math.Max(2, Math.Min(maximumThreshold, CalibratedHeight * 0.20))
+                        : maximumThreshold;
+                    IsCalibrated = true;
+                    logger.Info($"Float calibrated: height {CalibratedHeight:F1}px, drop threshold {ThresholdPixels:F1}px, normal speed limit {NormalSpeedLimit():F1}px/s.");
+                }
+                return false;
+            }
+
+            double drop = observation.Position.Y - expectedY;
+            // Ordinary motion is measured in pixels/second, so slower capture or
+            // short occlusion cannot turn normal drift into an abrupt movement.
+            double normalMovement = NormalSpeedLimit() * elapsed / 1000.0 + 1;
+            if (frameDrop >= ThresholdPixels && drop >= ThresholdPixels && frameDrop > normalMovement)
             {
                 biteDetected = true;
-                logger.Info($"Float pulled down {frameDrop} pixels since the last observation ({drop} below reference), that is a bite.");
-                RaiseEvent(new FishingEvent { Action = FishingAction.Loot });
+                logger.Info($"Float bite: drop {frameDrop:F1}px in {elapsed}ms, reference drop {drop:F1}px, threshold {ThresholdPixels:F1}px, normal movement limit {normalMovement:F1}px.");
+                FishingEventHandler?.Invoke(new FishingEvent { Action = FishingAction.Loot });
                 return true;
             }
 
-            expectedY += movement * followFactor;
-            RaiseEvent(new FishingEvent { Amplitude = drop, Action = FishingAction.BobberMove });
+            double follow = 1 - Math.Pow(1 - followFactor, elapsed / ReferenceIntervalMilliseconds);
+            expectedY += drop * follow;
+            AddNormalSpeed(speed);
+            FishingEventHandler?.Invoke(new FishingEvent
+            {
+                Amplitude = (int)Math.Round(drop), Action = FishingAction.BobberMove
+            });
             return false;
+        }
+
+        private void AddHeight(BobberObservation observation)
+        {
+            if (observation.IsVisible && observation.Size.Height > 0)
+                heights.Add(observation.Size.Height);
+        }
+
+        private void AddNormalSpeed(double speed)
+        {
+            if (normalSpeeds.Count == MotionHistoryLength) normalSpeeds.RemoveAt(0);
+            normalSpeeds.Add(speed);
+        }
+
+        private double NormalSpeedLimit()
+        {
+            if (normalSpeeds.Count == 0) return 0;
+            double median = Median(normalSpeeds);
+            var deviations = normalSpeeds.ConvertAll(value => Math.Abs(value - median));
+            return median + 3 * Median(deviations);
+        }
+
+        private static double Median(List<double> values)
+        {
+            var sorted = values.ToArray();
+            Array.Sort(sorted);
+            int middle = sorted.Length / 2;
+            return sorted.Length % 2 == 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
         }
     }
 }
