@@ -1,6 +1,5 @@
 using log4net;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 
 #nullable enable
@@ -14,19 +13,9 @@ namespace FishingFun
     /// landed keeps sinking gently, a pixel or two a frame, and that goes on for a
     /// while.
     /// 
-    /// So the float is not compared against a fixed position. Instead the position it
-    /// is expected to be at is worked out from how it has been moving, and a bite is
-    /// when the float moves away from that by a lot.
-    /// 
-    /// The expected position follows the float, but only slowly. A float sinking
-    /// gently is followed, so it never looks like a bite. A float being pulled under
-    /// moves much further and much faster than the expected position can follow, so it
-    /// stands out.
-    /// 
-    /// The earlier version took the middle of every position it had seen as the
-    /// reference. That reference drifted along with the float, so a float that sank
-    /// gently could reach the threshold on its own, and the bot reeled in before
-    /// anything had bitten.
+    /// A bite must move down sharply since the last observation as well as fall
+    /// below the moving reference. Distance from the reference alone is insufficient:
+    /// ordinary three- or four-pixel drift can build up enough lag to cross it.
     /// </summary>
     public class PositionBiteWatcher : IBiteWatcher
     {
@@ -46,12 +35,9 @@ namespace FishingFun
         private readonly int biteThreshold;
 
         /// <summary>
-        /// How much of the movement the expected position follows. The float sinking
-        /// gently is followed closely, a float being pulled under is not followed at
-        /// all. Measured against real fishing, 0.4 tells the two apart: a float
-        /// sinking a pixel or two a frame never gets more than a few pixels away from
-        /// where it was expected to be, while a float being pulled under is left
-        /// behind at once.
+        /// How much of each observed movement the expected position follows.
+        /// A separate per-observation drop check prevents tracking lag from
+        /// turning gradual motion into a bite.
         /// </summary>
         private readonly double followFactor;
 
@@ -67,9 +53,10 @@ namespace FishingFun
         private bool hasExpected;
 
         /// <summary>
-        /// The furthest the float has been below where it was expected to be.
+        /// The previous observed position, used to distinguish a sharp drop from
+        /// distance accumulated through gradual drift.
         /// </summary>
-        private int deepestDrop;
+        private int previousY;
 
         /// <summary>
         /// True once the float has been pulled far enough down to count as a bite.
@@ -103,8 +90,8 @@ namespace FishingFun
             RaiseEvent(new FishingEvent { Action = FishingAction.Reset });
 
             expectedY = InitialBobberPosition.Y;
-            hasExpected = false;
-            deepestDrop = 0;
+            hasExpected = true;
+            previousY = InitialBobberPosition.Y;
             biteDetected = false;
         }
 
@@ -124,6 +111,7 @@ namespace FishingFun
             if (!hasExpected)
             {
                 expectedY = currentY;
+                previousY = currentY;
                 hasExpected = true;
                 return false;
             }
@@ -135,23 +123,22 @@ namespace FishingFun
             // The y axis grows downwards, so a float that has been pulled under has a
             // larger y than where it was expected to be.
             double movement = currentY - expectedY;
-            expectedY += movement * followFactor;
+            // Measure before following. Following first attenuates a seven-pixel
+            // bite to four pixels and hides it below the detection threshold.
+            int drop = (int)Math.Round(movement);
+            int frameDrop = currentY - previousY;
+            previousY = currentY;
 
-            int drop = (int)Math.Round(currentY - expectedY);
-
-            if (drop > deepestDrop)
-            {
-                deepestDrop = drop;
-            }
-
-            if (deepestDrop >= strikeValue && deepestDrop >= biteThreshold)
+            int threshold = Math.Max(strikeValue, biteThreshold);
+            if (drop >= threshold && frameDrop >= threshold)
             {
                 biteDetected = true;
-                logger.Info($"Float pulled down {deepestDrop} pixels, that is a bite.");
+                logger.Info($"Float pulled down {frameDrop} pixels since the last observation ({drop} below reference), that is a bite.");
                 RaiseEvent(new FishingEvent { Action = FishingAction.Loot });
                 return true;
             }
 
+            expectedY += movement * followFactor;
             RaiseEvent(new FishingEvent { Amplitude = drop, Action = FishingAction.BobberMove });
             return false;
         }

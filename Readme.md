@@ -43,7 +43,7 @@ Or compile the source and run it from visual studio.
 * Enable 'Autoloot' (Esc, Interface Options, Controls, Check Autoloot)
 * Turn off Click to move (Esc, Interface Options, Mouse, Uncheck Click to move)
 * Make sure 'Right Click' loots.
-* Put the cast fishing Button on poistion 4 of your Action Bar. I.e. when 4 is clicked fishing will cast.
+* Put the cast fishing Button on position 5 of your Action Bar. I.e. when 5 is clicked fishing will cast. The UI preserves any previously saved custom key binding.
 * Zoom in completely so your character is not visible.
 * Make sure the fishing float is in the middle of the screen.
 * Fish at ground level, not off docks or other high places.
