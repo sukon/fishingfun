@@ -7,7 +7,8 @@ using System.IO;
 namespace FishingFun
 {
     /// <summary>
-    /// Settings that decide how much the bot writes to disk.
+    /// Settings that decide how much the bot writes to disk, and how human the
+    /// bot's timing is.
     /// 
     /// The bot writes in two places. The log file gets a line for every message, and the
     /// float observation recording writes a row for every frame of every cast. Both are
@@ -18,16 +19,23 @@ namespace FishingFun
     /// observation recording is off until it is asked for. Nothing is lost from the
     /// screen, because the user interface shows every message as it happens.
     /// 
+    /// The human timing settings decide how the bot spaces out its actions. They are
+    /// on by default, and switching them off gives back the old random behaviour
+    /// rather than a set of fixed values.
+    /// 
     /// Settings are read from the environment first and from fishingfun.config next, so
     /// a machine can be set up without touching the installation:
     /// 
     ///   set FISHINGFUN_LOG_FILE_THRESHOLD=WARN
     ///   set FISHINGFUN_RECORD_FLOAT_TRACES=1
+    ///   set FISHINGFUN_HUMAN_BEHAVIOUR=0
     /// 
     /// or in fishingfun.config, one setting per line:
     /// 
     ///   log_file_threshold=WARN
     ///   record_float_traces=false
+    ///   human_behaviour=true
+    ///   human_jitter=1.0
     /// </summary>
     public static class BotConfig
     {
@@ -46,6 +54,8 @@ namespace FishingFun
         private const int DefaultLogFileMaxSizeMb = 10;
         private const int DefaultLogFileBackups = 5;
         private const bool DefaultRecordFloatTraces = false;
+        private const bool DefaultHumanBehaviour = true;
+        private const double DefaultHumanJitter = 1.0;
 
         /// <summary>
         /// Whether messages are written to the log file at all. When this is false the
@@ -87,6 +97,25 @@ namespace FishingFun
         public static bool RecordFloatTraces { get; set; } = DefaultRecordFloatTraces;
 
         /// <summary>
+        /// Whether the bot spaces its actions out the way a person would.
+        /// 
+        /// When this is false the bot uses the random behaviour it had before, not a
+        /// set of fixed times. Switching it off therefore does not change anything
+        /// else about how the bot behaves.
+        /// </summary>
+        public static bool HumanBehaviour { get; set; } = DefaultHumanBehaviour;
+
+        /// <summary>
+        /// How strong the variation in the timings is, from 0 to 2.
+        /// 
+        /// Zero gives the middle of every range, one gives the range as it was
+        /// designed and two gives twice the spread. A value outside the range is
+        /// brought back inside it, so that the bot can never be made slower than it
+        /// was in a way that loses fish.
+        /// </summary>
+        public static double HumanJitter { get; set; } = DefaultHumanJitter;
+
+        /// <summary>
         /// Puts every setting back to its default. Used by the tests.
         /// </summary>
         public static void Reset()
@@ -97,6 +126,8 @@ namespace FishingFun
             LogFileMaxSizeMb = DefaultLogFileMaxSizeMb;
             LogFileBackups = DefaultLogFileBackups;
             RecordFloatTraces = DefaultRecordFloatTraces;
+            HumanBehaviour = DefaultHumanBehaviour;
+            HumanJitter = DefaultHumanJitter;
         }
 
         /// <summary>
@@ -126,6 +157,8 @@ namespace FishingFun
             Apply("FISHINGFUN_LOG_FILE_MAX_SIZE_MB", value => LogFileMaxSizeMb = ParseInt(value, LogFileMaxSizeMb, 1));
             Apply("FISHINGFUN_LOG_FILE_BACKUPS", value => LogFileBackups = ParseInt(value, LogFileBackups, 0));
             Apply("FISHINGFUN_RECORD_FLOAT_TRACES", value => RecordFloatTraces = ParseBool(value, RecordFloatTraces));
+            Apply("FISHINGFUN_HUMAN_BEHAVIOUR", value => HumanBehaviour = ParseBool(value, HumanBehaviour));
+            Apply("FISHINGFUN_HUMAN_JITTER", value => HumanJitter = ParseDouble(value, HumanJitter, 0.0, 2.0));
         }
 
         private static void LoadFromFile()
@@ -187,6 +220,12 @@ namespace FishingFun
                     case "record_float_traces":
                         RecordFloatTraces = ParseBool(value, RecordFloatTraces);
                         break;
+                    case "human_behaviour":
+                        HumanBehaviour = ParseBool(value, HumanBehaviour);
+                        break;
+                    case "human_jitter":
+                        HumanJitter = ParseDouble(value, HumanJitter, 0.0, 2.0);
+                        break;
                 }
             }
         }
@@ -224,6 +263,26 @@ namespace FishingFun
             }
 
             return fallback;
+        }
+
+        /// <summary>
+        /// Reads a number. A value that is not a number, or is not finite, is ignored
+        /// and the value it had is kept. A value that is outside the range is brought
+        /// back inside it.
+        /// </summary>
+        private static double ParseDouble(string value, double fallback, double minimum, double maximum)
+        {
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+            {
+                return fallback;
+            }
+
+            if (double.IsNaN(parsed) || double.IsInfinity(parsed))
+            {
+                return fallback;
+            }
+
+            return Math.Max(minimum, Math.Min(maximum, parsed));
         }
     }
 }

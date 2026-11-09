@@ -197,6 +197,36 @@ class WriteReductionRegression
         }
 
         Console.WriteLine();
+        Console.WriteLine("=== the human timing settings are read ===");
+        {
+            FishingFun.BotConfig.Reset();
+            Check("human_behaviour is on by default", FishingFun.BotConfig.HumanBehaviour);
+            Check("human_jitter is 1 by default", Math.Abs(FishingFun.BotConfig.HumanJitter - 1.0) < 0.0001);
+
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_BEHAVIOUR", "0");
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_JITTER", "0.5");
+            FishingFun.BotConfig.Load();
+            Check("human_behaviour is read from the environment", !FishingFun.BotConfig.HumanBehaviour);
+            Check("human_jitter is read from the environment", Math.Abs(FishingFun.BotConfig.HumanJitter - 0.5) < 0.0001);
+
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_JITTER", "99");
+            FishingFun.BotConfig.Load();
+            Check("a strength that is too big is brought back", Math.Abs(FishingFun.BotConfig.HumanJitter - 2.0) < 0.0001);
+
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_JITTER", "not-a-number");
+            FishingFun.BotConfig.Load();
+            Check("a strength that is not a number keeps the default", Math.Abs(FishingFun.BotConfig.HumanJitter - 1.0) < 0.0001);
+
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_JITTER", "NaN");
+            FishingFun.BotConfig.Load();
+            Check("a strength that is not finite keeps the default", Math.Abs(FishingFun.BotConfig.HumanJitter - 1.0) < 0.0001);
+
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_BEHAVIOUR", null);
+            Environment.SetEnvironmentVariable("FISHINGFUN_HUMAN_JITTER", null);
+            FishingFun.BotConfig.Reset();
+        }
+
+        Console.WriteLine();
         Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILURE(S)");
         Environment.Exit(failures == 0 ? 0 : 1);
     }

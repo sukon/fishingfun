@@ -19,6 +19,74 @@ namespace FishingFun
         private static Random random = new Random();
 
         /// <summary>
+        /// All the input the bot sends to the game goes through this lock, so that a
+        /// key press can never land in the middle of a mouse movement or between
+        /// the mouse button going down and coming back up.
+        /// </summary>
+        private static readonly object InputLock = new object();
+
+        /// <summary>
+        /// Says whether the bot still wants to send input. It is checked again after
+        /// the input lock has been taken, so that an action which was queued up
+        /// before the bot was stopped does not go through afterwards.
+        /// 
+        /// It is null when nothing is asking for it to be checked.
+        /// </summary>
+        private static Func<bool>? cancellationCheck;
+
+        /// <summary>
+        /// Set when no more input is to be sent to the game.
+        /// </summary>
+        private static bool inputStopped;
+
+        /// <summary>
+        /// Stops any further input from being sent to the game.
+        /// 
+        /// This waits for anything that is being sent right now to finish, so that
+        /// when it returns nothing is being sent and nothing new can start. The
+        /// releases are not blocked by this, because the game has to be told that
+        /// a button is no longer held down.
+        /// </summary>
+        public static void StopSendingInput()
+        {
+            lock (InputLock)
+            {
+                inputStopped = true;
+            }
+        }
+
+        /// <summary>
+        /// Allows input to be sent to the game again.
+        /// </summary>
+        public static void ResumeSendingInput()
+        {
+            lock (InputLock)
+            {
+                inputStopped = false;
+            }
+        }
+
+        /// <summary>
+        /// Sets the check that says whether the bot still wants to send input.
+        /// </summary>
+        public static void SetCancellationCheck(Func<bool>? check)
+        {
+            lock (InputLock)
+            {
+                cancellationCheck = check;
+            }
+        }
+
+        /// <summary>
+        /// True when the bot has been asked to stop and must not send any more input.
+        /// </summary>
+        private static bool IsCancelled()
+        {
+            var check = cancellationCheck;
+            return check != null && check();
+        }
+
+        /// <summary>
         /// Time to wait after the right mouse button has been released before the cursor is
         /// moved back to where the user left it. The game samples the mouse position once
         /// per frame, so moving the cursor in the same frame as the button release makes the
@@ -148,11 +216,62 @@ namespace FishingFun
             KeyUp(lastKey);
         }
 
+        /// <summary>
+        /// Runs the given action, unless the bot has been asked to stop.
+        /// 
+        /// The check is made after the input lock has been taken, so that an action
+        /// which was queued up before the bot was stopped does not go through
+        /// afterwards.
+        /// 
+        /// Returns false when the action was not run because the bot was stopped.
+        /// </summary>
+        public static bool RunUnlessCancelled(Action action)
+        {
+            lock (InputLock)
+            {
+                if (inputStopped || IsCancelled()) return false;
+
+                action();
+                return true;
+            }
+        }
+
         public static void PressKey(ConsoleKey key)
         {
-            KeyDown(key);
-            Thread.Sleep(50 + random.Next(0, 75));
-            KeyUp(key);
+            RunUnlessCancelled(() =>
+            {
+                try
+                {
+                    KeyDown(key);
+                    Thread.Sleep(HumanTiming.Current.KeyHoldMs());
+                }
+                finally
+                {
+                    // The key must always be let go, otherwise the game keeps seeing it
+                    // as held down.
+                    KeyUp(key);
+                }
+            });
+        }
+
+        /// <summary>
+        /// Sends the mouse button down and then always sends it back up, even when
+        /// something goes wrong in between.
+        /// 
+        /// The game keeps the button held down otherwise, and the camera then moves
+        /// with the mouse for as long as the button is down.
+        /// </summary>
+        public static void ClickWithGuaranteedRelease(Action sendDown, Action sendUp, Action hold)
+        {
+            try
+            {
+                sendDown();
+                hold?.Invoke();
+            }
+            finally
+            {
+                sendUp();
+            }
         }
 
         public static void KeyUp(ConsoleKey key)
@@ -166,56 +285,62 @@ namespace FishingFun
 
         public static void RightClickMouse(ILog logger, System.Drawing.Point position)
         {
-            var activeProcess = GetActiveProcess();
-            var wowProcess = WowProcess.Get();
-            if (wowProcess != null)
+            RunUnlessCancelled(() =>
             {
-                // If the user is holding a mouse button down the game is getting real
-                // input from them. Mixing that with an injected click makes the game
-                // behave unpredictably, so skip the click in that case.
-                if (IsMouseButtonHeldDown())
+                var activeProcess = GetActiveProcess();
+                var wowProcess = WowProcess.Get();
+                if (wowProcess != null)
                 {
-                    logger.Info("Mouse button is held down by the user, skipping the loot click.");
-                    return;
+                    // If the user is holding a mouse button down the game is getting real
+                    // input from them. Mixing that with an injected click makes the game
+                    // behave unpredictably, so skip the click in that case.
+                    if (IsMouseButtonHeldDown())
+                    {
+                        logger.Info("Mouse button is held down by the user, skipping the loot click.");
+                        return;
+                    }
+
+                    var oldPosition = System.Windows.Forms.Cursor.Position;
+
+                    var lParam = MakeClickLParam(wowProcess.MainWindowHandle, position);
+
+                    // Send a button up before anything else. If the game still thinks the
+                    // right button is down from an earlier click it treats any mouse movement
+                    // as a look and the camera swings away.
+                    PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, lParam);
+
+                    // Move the cursor onto the bobber and give the game time to read that
+                    // movement before the button is pressed. The game rotates the camera when
+                    // it sees the mouse move while the right mouse button is down, which is
+                    // what makes the view swing wildly when the fish bites.
+                    MoveCursorTo(position);
+                    Thread.Sleep(LootDelay);
+
+                    ClickWithGuaranteedRelease(
+                        () =>
+                        {
+                            bool buttonPressed = PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONDOWN, Keys.VK_RMB, lParam);
+                            if (!buttonPressed)
+                            {
+                                logger.Error("Failed to send the right mouse button down message.");
+                            }
+                        },
+                        () =>
+                        {
+                            if (!PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, lParam))
+                            {
+                                logger.Error("Failed to send the right mouse button up message.");
+                            }
+                        },
+                        () => Thread.Sleep(30 + random.Next(0, 47)));
+
+                    // Give the game time to process the button release before the cursor is
+                    // moved back, otherwise that movement is also seen as a camera rotation.
+                    Thread.Sleep(CursorRestoreDelayMs);
+
+                    RefocusOnOldScreen(logger, activeProcess, wowProcess, oldPosition);
                 }
-
-                var oldPosition = System.Windows.Forms.Cursor.Position;
-
-                var lParam = MakeClickLParam(wowProcess.MainWindowHandle, position);
-
-                // Send a button up before anything else. If the game still thinks the
-                // right button is down from an earlier click it treats any mouse movement
-                // as a look and the camera swings away.
-                PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, lParam);
-
-                // Move the cursor onto the bobber and give the game time to read that
-                // movement before the button is pressed. The game rotates the camera when
-                // it sees the mouse move while the right mouse button is down, which is
-                // what makes the view swing wildly when the fish bites.
-                MoveCursorTo(position);
-                Thread.Sleep(LootDelay);
-
-                bool buttonPressed = PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONDOWN, Keys.VK_RMB, lParam);
-                if (!buttonPressed)
-                {
-                    logger.Error("Failed to send the right mouse button down message.");
-                }
-
-                Thread.Sleep(30 + random.Next(0, 47));
-
-                // The button must always be released, otherwise the game keeps the right
-                // button held down and the camera keeps moving with the mouse.
-                if (!PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, lParam))
-                {
-                    logger.Error("Failed to send the right mouse button up message.");
-                }
-
-                // Give the game time to process the button release before the cursor is
-                // moved back, otherwise that movement is also seen as a camera rotation.
-                Thread.Sleep(CursorRestoreDelayMs);
-
-                RefocusOnOldScreen(logger, activeProcess, wowProcess, oldPosition);
-            }
+            });
         }
 
         public static void RightClickMouse()

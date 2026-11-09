@@ -38,6 +38,10 @@ namespace FishingFun
         {
             BotConfig.Load();
 
+            // The timings the bot uses are set up from the same settings, so that
+            // they are the same in the window and in the console.
+            HumanTiming.Configure(BotConfig.HumanBehaviour, BotConfig.HumanJitter);
+
             var hierarchy = (Hierarchy)LogManager.GetRepository();
 
             var consoleAppender = new ConsoleAppender
@@ -59,6 +63,11 @@ namespace FishingFun
 
             hierarchy.Root.Level = Level.All;
             hierarchy.Configured = true;
+
+            // Say which timings are in use, so that it can be seen from the log
+            // that the behaviour is on or off.
+            LogManager.GetLogger("Fishbot").Info(
+                $"Human timing: {(BotConfig.HumanBehaviour ? "on" : "off")}, strength {BotConfig.HumanJitter}.");
 
             return hierarchy;
         }

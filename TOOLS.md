@@ -7,9 +7,12 @@
 | Bite detection regression | Position replay | `tests/Run-BiteWatcherRegression.ps1` | No game or restored packages required |
 | Disk write reduction regression | Settings and log behaviour | `tests/Run-WriteReductionRegression.ps1` | No game or restored packages required |
 | Shared front end settings | Settings file round trip | `tests/Run-WriteReductionRegression.ps1` | The window and console front ends read the same file |
+| Human timing regression | Timing ranges, shape and fallbacks | `tests/Run-HumanTimingRegression.ps1` | No game or restored packages required |
 | Observation capture and replay | Per-cast CSV and offline watcher replay | `tools/Replay-BiteTrace.ps1`, `tools/BobberReplay.cs` | Position, size, area, missing frames and monotonic time |
 | Raw image capture and inspection | Live/offline detector diagnostic | `tools/Inspect-Bobber.ps1`, `tools/BobberDiagnostic.cs` | Read-only capture; raw pixels, overlays and rejection report |
 | Release build | Restore packages and MSBuild | `tools/Build-Release.ps1` | Downloads project-local .NET Framework 4.7.2 reference assemblies |
+| Bot safety regression | Stopping, input release and click position | `tests/Run-BotSafetyRegression.ps1` | No game or restored packages required |
+| Loot latency regression | Click is no later than it used to be | `tests/Run-LootLatencyRegression.ps1` | No game or restored packages required |
 
 ## Tools and Procedures
 
@@ -95,6 +98,78 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 **Requirements:** None beyond the program itself.
 
 **Notes / constraints:** The file is written when a slider is released, not on every step, so dragging it does not keep writing to the disk. The colour settings were previously only held in memory, which meant the console front end could never be given the same colour rule as the window front end.
+
+### Human timing
+
+**Purpose:** Keep the bot from acting on an exactly repeating rhythm.
+
+**Path / command:** `Source/FishingFunBot/Bot/HumanTiming.cs`; settings `human_behaviour` and `human_jitter`.
+
+**Use when:** Changing how long the bot waits before casting, how long it takes to react to a bite, or how long a key is held down.
+
+**Usage:** The bot uses these timings instead of fixed ones. The ranges are set so that the click on the float is never later than it was before, because a fish that is not clicked soon enough is lost.
+
+**Inputs / arguments:** `human_behaviour` (on by default) and `human_jitter` (0 to 2, default 1.0), read from `fishingfun.config` or from `FISHINGFUN_HUMAN_BEHAVIOUR` and `FISHINGFUN_HUMAN_JITTER`.
+
+**Outputs:** The timings only. Nothing is written to disk.
+
+**Requirements:** None beyond the program itself.
+
+**Notes / constraints:** Switching the behaviour off gives back the old random behaviour, not a set of fixed times, so nothing else about the bot changes. The values are skewed towards the short end of each range, because most people react quickly and a few are slow. The seed is only set by the tests, so two runs do not follow the same sequence. The curved cursor path was considered and left out of this round.
+
+### Bot safety
+
+**Purpose:** Check that stopping the bot works while it is waiting, that nothing is sent to the game after it has been stopped, that the mouse button and the keys are always let go, and that the right place is clicked when the float cannot be seen.
+
+**Path / command:** `tests/Run-BotSafetyRegression.ps1`
+
+**Use when:** Changing how the bot waits, how it sends input, or where it clicks.
+
+**Usage:** `powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-BotSafetyRegression.ps1`
+
+**Inputs / arguments:** None.
+
+**Outputs:** PASS/FAIL lines and nonzero exit on failure.
+
+**Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
+
+**Notes / constraints:** The mouse button is released in a finally block, so a failure in between cannot leave the button held down without trying to release it. If the release itself fails the failure is reported and the exception is not swallowed. The stop check is made after the input lock has been taken, so an action queued up before the bot was stopped does not go through, and stopping the bot waits for anything that is being sent so that no new action can start once the stop has finished.
+
+### Click latency
+
+**Purpose:** Check that the click on the float never comes later than it used to.
+
+**Path / command:** `tests/Run-LootLatencyRegression.ps1`
+
+**Use when:** Changing the reaction time, or adding work between the fish biting and the click.
+
+**Usage:** `powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-LootLatencyRegression.ps1`
+
+**Inputs / arguments:** None.
+
+**Outputs:** PASS/FAIL lines and nonzero exit on failure.
+
+**Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
+
+**Notes / constraints:** The lookup of the float happens between the bite and the click, so its cost comes out of the reaction time instead of being added to it. The time from the bite to the click is therefore the larger of the reaction time and the lookup, plus the 1000ms the camera needs, so the budget is 2120ms against the 2124ms of the old behaviour. A lookup longer than the whole reaction budget puts the click outside the budget; it cannot be undone, but the bot says so in the log. The pause before casting makes each round longer but cannot make the click on a fish any later.
+
+### Building
+
+**Purpose:** Build the program.
+
+**Path / command:** `Source/FishingFun.sln`
+
+**Use when:** Changing any source file.
+
+**Usage:** `"C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" -nologo -t:Build -p:Configuration=Release Source\FishingFun.sln`
+
+**Inputs / arguments:** `-t:Rebuild` for a clean build.
+
+**Outputs:** `Sourcein\Release\`.
+
+**Requirements:** Visual Studio 2022 with the .NET Framework 4.7.2 targeting pack.
+
+**Notes / constraints:** The window project is a legacy .NET Framework WPF project. The .NET SDK cannot build it, because the WPF targets only ship with the .NET Framework build of MSBuild. `dotnet build` therefore fails on `Source\FishingFun.sln` with MSB4216. The reduced `FishingFun.Sdk.sln` in the repository root holds the two projects the SDK can build, so that tools which only know how to run `dotnet build` still work. Use Visual Studio MSBuild for the real build.
 
 ### Release build
 

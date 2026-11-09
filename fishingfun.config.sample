@@ -47,3 +47,26 @@ log_file_backups = 5
 # replay it later with tools\Replay-BiteTrace.ps1.
 # Default: false
 record_float_traces = false
+
+# Whether the bot spaces its actions out the way a person would, instead of
+# using the same rhythm every time.
+#
+# When this is false the bot goes back to the random behaviour it had before,
+# not to a set of fixed times, so nothing else about it changes.
+#
+# Default: true
+human_behaviour = true
+
+# How strong the variation in the timings is, from 0 to 2.
+#
+#   0  every action takes the middle of its range
+#   1  the range as it was designed
+#   2  twice the spread, never outside the range
+#
+# The reaction time is deliberately kept no slower than it used to be, because
+# a fish that is not clicked soon enough is lost.
+#
+# A number that is too big is brought back to 2 and one that is not a number
+# is ignored.
+# Default: 1.0
+human_jitter = 1.0

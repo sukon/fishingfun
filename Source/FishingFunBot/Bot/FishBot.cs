@@ -21,8 +21,15 @@ namespace FishingFun
         private List<ConsoleKey> tenMinKey;
         private IBobberFinder bobberFinder;
         private IBiteWatcher biteWatcher;
-        private bool isEnabled;
-        private int maxFinshingMinutes = 45;
+        // The stop button is on another thread, so this has to be volatile for the
+        // bot thread to see the change.
+        private volatile bool isEnabled;
+
+        // Set when the bot is asked to stop. This is separate from isEnabled because
+        // the bot has not started yet before Start is called, and the key press
+        // before that must still go through.
+        private volatile bool stopRequested;
+        private int maxFinishingMinutes = 45;
         private int lureTimer = 10;
         private Stopwatch totalTimeStopWatch = new Stopwatch();
         private Stopwatch stopwatch = new Stopwatch();
@@ -50,6 +57,11 @@ namespace FishingFun
             this.lureKey = ConsoleKey.D3;
             this.hsKey = ConsoleKey.D9;
 
+            // The input the bot sends to the game is checked against this, so that
+            // an action which was queued up before the bot was stopped does not go
+            // through afterwards.
+            WowProcess.SetCancellationCheck(() => stopRequested);
+
             logger.Info("FishBot Created.");
 
             FishingEventHandler += (s, e) => { };
@@ -59,7 +71,9 @@ namespace FishingFun
         {
             biteWatcher.FishingEventHandler = (e) => FishingEventHandler?.Invoke(this, e);
 
+            stopRequested = false;
             isEnabled = true;
+            WowProcess.ResumeSendingInput();
      
             // Enable total time stopwatch
             totalTimeStopWatch.Start();
@@ -76,6 +90,16 @@ namespace FishingFun
                 try
                 {                    
                     checkLureTimer();
+
+                    // A person does not cast the instant the last fish is in the bag,
+                    // and the game needs a moment to finish the last cast.
+                    int preCastDelay = HumanTiming.Current.PreCastDelayMs();
+                    if (preCastDelay > 0)
+                    {
+                        logger.Info($"Waiting {preCastDelay}ms before casting.");
+                    }
+                    WaitWhileEnabled(preCastDelay);
+
                     logger.Info($"Pressing key {castKey} to Cast.");
 
                     FishingEventHandler?.Invoke(this, new FishingEvent { Action = FishingAction.Cast });
@@ -102,10 +126,10 @@ namespace FishingFun
             TimeSpan ts = totalTimeStopWatch.Elapsed;
             int elapsedMinutes = (int)ts.TotalMinutes;
 
-            logger.Info($"Elapsed {elapsedMinutes} out of {maxFinshingMinutes}mins.");
+            logger.Info($"Elapsed {elapsedMinutes} out of {maxFinishingMinutes}mins.");
 
-            if (elapsedMinutes > maxFinshingMinutes)
-            {               
+            if (elapsedMinutes > maxFinishingMinutes)
+            {                               
                 Stop();
                 WowProcess.PressKey(hsKey);
                 Thread.Sleep(20000);
@@ -156,7 +180,14 @@ namespace FishingFun
 
         public void Stop()
         {
+            stopRequested = true;
             isEnabled = false;
+
+            // Nothing more is sent to the game once this returns. Anything that was
+            // being sent is finished first, so that a button or a key is never left
+            // held down.
+            WowProcess.StopSendingInput();
+
             totalTimeStopWatch.Reset();
             logger.Error("Bot is Stopping...");
         }
@@ -226,10 +257,63 @@ namespace FishingFun
 
         private void Loot(Point bobberPosition)
         {
-            Sleep(900 + random.Next(0, 225));
-            logger.Info($"Right clicking mouse to Loot.");
+            // The pause between noticing the fish and moving the hand onto the float.
+            // It is part of the time the fish is on the line, so it is kept short and
+            // it stops straight away when the bot is stopped.
+            //
+            // The time taken to look the float up again comes out of this pause, so
+            // that the click is never later than it used to be. That lookup is the
+            // only thing here that can take a noticeable amount of time.
+            var reactionWatch = Stopwatch.StartNew();
+
+            var fresh = bobberFinder.Find();
+            Point? freshPosition = fresh.IsVisible ? fresh.Position : (Point?)null;
+            Point chosen = LootPosition.Choose(bobberPosition, freshPosition);
+            if (chosen == bobberPosition && freshPosition.HasValue && chosen != freshPosition.Value)
+            {
+                // The search found something else. Clicking where the float was is
+                // safer than clicking whatever was found.
+                logger.Info("Something else was found instead of the float, clicking where the float was.");
+            }
+            else if (!freshPosition.HasValue)
+            {
+                logger.Info("The float could not be seen again, clicking where it was last seen.");
+            }
+            bobberPosition = chosen;
+
+            int reaction = HumanTiming.Current.LootReactionMs();
+            int remaining = reaction - (int)reactionWatch.ElapsedMilliseconds;
+            if (remaining < 0) remaining = 0;
+
+            if (remaining == 0 && reactionWatch.ElapsedMilliseconds > reaction)
+            {
+                // The lookup took longer than the whole reaction time, so the click
+                // is later than the budget. There is nothing to be done about it,
+                // but it is worth saying so.
+                logger.Info($"Looking the float up again took {reactionWatch.ElapsedMilliseconds}ms, which is longer than the reaction time of {reaction}ms.");
+            }
+
+            if (!WaitWhileEnabled(remaining))
+            {
+                logger.Info("Bot was stopped before the float was clicked.");
+                return;
+            }
+
+            logger.Info($"Reacted in {reaction}ms.");
+            logger.Info($"Right clicking mouse to Loot at {bobberPosition}.");
             WowProcess.RightClickMouse(logger, bobberPosition);
             Sleep(1000 + random.Next(0, 125));
+        }
+
+        /// <summary>
+        /// Waits for the given time, but stops straight away when the bot is stopped.
+        /// 
+        /// Returns true when the whole time was waited out and false when the bot was
+        /// stopped part way through.
+        /// </summary>
+        private bool WaitWhileEnabled(int milliseconds)
+        {
+            return BotWait.Wait(milliseconds, () => isEnabled, FlushBuffers);
         }
 
         public static void Sleep(int ms)
