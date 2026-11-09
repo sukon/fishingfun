@@ -8,6 +8,7 @@ namespace FishingFun
     public partial class ColourConfiguration : System.Windows.Window
     {
         private readonly IPixelClassifier pixelClassifier;
+        private readonly FishingFunSettings settings = FishingFunSettings.Load();
 
         private Bitmap ScreenCapture = new Bitmap(1, 1);
 
@@ -153,6 +154,14 @@ namespace FishingFun
 
         private void Slider_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
         {
+            // The colour settings are kept with the other settings, so that the console
+            // front end looks for the float the same way. They are written once the
+            // slider is let go, not on every step, so that dragging it does not keep
+            // writing to the disk.
+            settings.ColourMultiplier = pixelClassifier.ColourMultiplier;
+            settings.ColourClosenessMultiplier = pixelClassifier.ColourClosenessMultiplier;
+            settings.Save();
+
             RenderColour(true);
         }
 

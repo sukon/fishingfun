@@ -27,6 +27,11 @@ namespace FishingFun
         private Timer WindowSizeChangedTimer;
         private System.Threading.Thread? botThread;
 
+        /// <summary>
+        /// The settings shared with the console front end.
+        /// </summary>
+        private readonly FishingFunSettings settings = FishingFunSettings.Load();
+
         public MainWindow()
         {
             InitializeComponent();
@@ -36,7 +41,12 @@ namespace FishingFun
             this.DataContext = LogEntries = new ObservableCollection<LogEntry>();
             this.pixelClassifier = new PixelClassifier();
             pixelClassifier.SetConfiguration(WowProcess.IsWowClassic());
-             
+
+            // The same settings the console front end reads, so that both look for the
+            // float in the same way and cast with the same key.
+            settings.ApplyTo(pixelClassifier);
+            FishingBot.logger.Info("Settings: " + settings.Describe());
+
             this.bobberFinder = new SearchBobberFinder(pixelClassifier);
 
             var imageProvider = bobberFinder as IImageProvider;
@@ -165,7 +175,7 @@ namespace FishingFun
 
         public void BotThread()
         {
-            bot = new FishingBot(bobberFinder, this.biteWatcher, KeyChooser.CastKey, new List<ConsoleKey> { ConsoleKey.D5, ConsoleKey.D6 });
+            bot = new FishingBot(bobberFinder, this.biteWatcher, settings.CastKey, settings.TenMinuteKeys);
             bot.FishingEventHandler += FishingEventHandler;
             bot.Start();
 

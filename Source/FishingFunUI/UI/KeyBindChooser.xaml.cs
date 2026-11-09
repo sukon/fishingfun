@@ -1,15 +1,22 @@
-﻿using System;
-using System.IO;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 
 namespace FishingFun
 {
+    /// <summary>
+    /// Lets the user choose the key that casts the float. The choice is kept with the
+    /// other settings, so that the console front end casts with the same key.
+    /// </summary>
     public partial class KeyBindChooser : UserControl
     {
-        public ConsoleKey CastKey { get; set; } = ConsoleKey.D5;
+        public ConsoleKey CastKey
+        {
+            get { return settings.CastKey; }
+            set { settings.CastKey = value; }
+        }
 
-        private static string Filename = "keybind.txt";
+        private readonly FishingFunSettings settings = FishingFunSettings.Load();
 
         public EventHandler CastKeyChanged;
 
@@ -18,31 +25,8 @@ namespace FishingFun
             CastKeyChanged += (s, e) => { };
 
             InitializeComponent();
-            ReadConfiguration();
-        }
 
-        private void ReadConfiguration()
-        {
-            try
-            {
-                if (File.Exists(Filename))
-                {
-                    var contents = File.ReadAllText(Filename);
-                    CastKey = (ConsoleKey)int.Parse(contents);
-                    KeyBind.Text = GetCastKeyText(this.CastKey);
-                }
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                CastKey = ConsoleKey.D5;
-                KeyBind.Text = GetCastKeyText(this.CastKey);
-            }
-        }
-
-        private void WriteConfiguration()
-        {
-            File.WriteAllText(Filename, ((int)CastKey).ToString());
+            KeyBind.Text = GetCastKeyText(this.CastKey);
         }
 
         private void CastKey_Focus(object sender, RoutedEventArgs e)
@@ -52,7 +36,7 @@ namespace FishingFun
 
         private void KeyBind_KeyUp(object sender, System.Windows.Input.KeyEventArgs e)
         {
-            var key = e.Key.ToString();
+            string key = e.Key.ToString();
             ProcessKeybindText(key);
         }
 
@@ -64,7 +48,7 @@ namespace FishingFun
                 if (Enum.TryParse<ConsoleKey>(key, out ck))
                 {
                     this.CastKey = ck;
-                    WriteConfiguration();
+                    settings.Save();
                     CastKeyChanged?.Invoke(this, null);
                     return;
                 }

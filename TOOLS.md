@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | Bite detection regression | Position replay | `tests/Run-BiteWatcherRegression.ps1` | No game or restored packages required |
 | Disk write reduction regression | Settings and log behaviour | `tests/Run-WriteReductionRegression.ps1` | No game or restored packages required |
+| Shared front end settings | Settings file round trip | `tests/Run-WriteReductionRegression.ps1` | The window and console front ends read the same file |
 | Observation capture and replay | Per-cast CSV and offline watcher replay | `tools/Replay-BiteTrace.ps1`, `tools/BobberReplay.cs` | Position, size, area, missing frames and monotonic time |
 | Raw image capture and inspection | Live/offline detector diagnostic | `tools/Inspect-Bobber.ps1`, `tools/BobberDiagnostic.cs` | Read-only capture; raw pixels, overlays and rejection report |
 | Release build | Restore packages and MSBuild | `tools/Build-Release.ps1` | Downloads project-local .NET Framework 4.7.2 reference assemblies |
@@ -76,6 +77,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 **Requirements:** A current Release build, Windows desktop/game visible for live capture, .NET Framework and Visual Studio 2022 C# compiler. For live capture, cast manually and leave the game window unobscured.
 
 **Notes / constraints:** The report includes raw candidate rejection details; a sparse candidate may be pending temporal confirmation even if its geometry is acceptable. Raw image captures are larger than CSV traces. This is a detector diagnostic, not an automatic fishing run.
+
+### Shared front end settings
+
+**Purpose:** Keep the window front end and the console front end behaving the same way.
+
+**Path / command:** `Source/FishingFunBot/Bot/FishingFunSettings.cs`; file `fishingfun.settings` next to the program.
+
+**Use when:** Changing which key casts the float, the colour rule, or the keys that run the bait macro.
+
+**Usage:** The window front end writes the file when the cast key or the colour sliders change. The console front end reads it at startup. Both write a `Settings: ...` line to the log at startup so the two can be compared.
+
+**Inputs / arguments:** `cast_key`, `colour_multiplier`, `colour_closeness_multiplier`, `ten_minute_keys`. The older `keybind.txt` is still read for the cast key.
+
+**Outputs:** `fishingfun.settings` next to the program.
+
+**Requirements:** None beyond the program itself.
+
+**Notes / constraints:** The file is written when a slider is released, not on every step, so dragging it does not keep writing to the disk. The colour settings were previously only held in memory, which meant the console front end could never be given the same colour rule as the window front end.
 
 ### Release build
 

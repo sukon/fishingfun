@@ -165,6 +165,38 @@ class WriteReductionRegression
         }
 
         Console.WriteLine();
+        Console.WriteLine("=== the settings are shared and kept in one file ===");
+        {
+            string settingsPath = Path.Combine(WorkDirectory, FishingFun.FishingFunSettings.FileName);
+            if (File.Exists(settingsPath)) File.Delete(settingsPath);
+
+            FishingFun.FishingFunSettings.ResetForTests();
+
+            var written = new FishingFun.FishingFunSettings
+            {
+                CastKey = ConsoleKey.D4,
+                ColourMultiplier = 0.42,
+                ColourClosenessMultiplier = 1.8,
+                TenMinuteKeys = new List<ConsoleKey> { ConsoleKey.D7 }
+            };
+            written.Save();
+
+            Check("the settings file is written", File.Exists(settingsPath));
+
+            FishingFun.FishingFunSettings.ResetForTests();
+            var read = FishingFun.FishingFunSettings.Load();
+            Check("the cast key is kept", read.CastKey == ConsoleKey.D4, "(got " + read.CastKey + ")");
+            Check("the colour multiplier is kept", Math.Abs(read.ColourMultiplier - 0.42) < 0.0001, "(got " + read.ColourMultiplier + ")");
+            Check("the closeness multiplier is kept", Math.Abs(read.ColourClosenessMultiplier - 1.8) < 0.0001, "(got " + read.ColourClosenessMultiplier + ")");
+            Check("the ten minute keys are kept", read.TenMinuteKeys.Count == 1 && read.TenMinuteKeys[0] == ConsoleKey.D7);
+
+            Check("the front ends share one set of settings",
+                ReferenceEquals(FishingFun.FishingFunSettings.Current, FishingFun.FishingFunSettings.Current));
+
+            File.Delete(settingsPath);
+        }
+
+        Console.WriteLine();
         Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILURE(S)");
         Environment.Exit(failures == 0 ? 0 : 1);
     }

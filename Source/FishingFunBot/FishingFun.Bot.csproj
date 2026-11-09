@@ -61,6 +61,7 @@
     <Compile Include="Bot\BobberTracker.cs" />
     <Compile Include="Bot\BotConfig.cs" />
     <Compile Include="Bot\FishBot.cs" />
+    <Compile Include="Bot\FishingFunSettings.cs" />
     <Compile Include="Bot\Interfaces\IBiteWatcher.cs" />
     <Compile Include="Bot\Interfaces\IBobberFinder.cs" />
     <Compile Include="Bot\Interfaces\IImageProvider.cs" />
