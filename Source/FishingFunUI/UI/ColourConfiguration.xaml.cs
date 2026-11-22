@@ -139,7 +139,7 @@ namespace FishingFun
 
         private void LootDelay_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)
         {
-            this.LabelLootDelay.Text = $"Wait {this.LootDelay}ms after moving the cursor onto the bobber, before clicking. Raise this if the camera moves when the fish bites.";
+            this.LabelLootDelay.Text = $"Wait a random 100 to {this.LootDelay}ms after moving the cursor onto the bobber, before clicking. Raise this if the camera moves when the fish bites.";
         }
 
         private void ColourMultiplier_ValueChanged(object sender, System.Windows.RoutedPropertyChangedEventArgs<double> e)

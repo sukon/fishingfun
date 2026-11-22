@@ -25,16 +25,27 @@ namespace FishingFun
         }
 
         /// <summary>
-        /// The wait the camera needs after the cursor has been moved onto the float.
-        /// This is the same value the bot uses.
+        /// The longest the wait before the click may be. The bot picks a random
+        /// value between the minimum and the maximum.
         /// </summary>
-        private const int LootDelay = 1000;
+        private const int LootDelayMaximum = 300;
+
+        /// <summary>
+        /// The shortest the wait before the click may be.
+        /// </summary>
+        private const int LootDelayMinimum = 100;
 
         /// <summary>
         /// The worst case of the old behaviour: the reaction was 900 to 1124ms and
         /// then the camera wait of 1000ms.
         /// </summary>
         private const int OldWorstCase = 2124;
+
+        /// <summary>
+        /// The worst case the bot aims for now: the longest reaction and then the
+        /// longest wait before the click.
+        /// </summary>
+        private const int WorstCase = 1120 + LootDelayMaximum;
 
         /// <summary>
         /// The longest the lookup of the float is allowed to take before it is
@@ -45,7 +56,32 @@ namespace FishingFun
 
         public static int Main()
         {
-            Console.WriteLine("=== the click never comes later than it used to ===");
+            Console.WriteLine("=== the wait before the click is short and random ===");
+            {
+                // The production default is the one the slider starts at. The wait
+                // is picked at random between the minimum and that default.
+                var timing = new HumanTiming(new Random(5), 1.0, true);
+
+                bool withinRange = true;
+                int min = int.MaxValue;
+                int max = 0;
+                for (int i = 0; i < 5000; i++)
+                {
+                    int delay = timing.LootDelayMs(WowProcess.LootDelay);
+                    if (delay < LootDelayMinimum || delay > LootDelayMaximum) withinRange = false;
+                    if (delay < min) min = delay;
+                    if (delay > max) max = delay;
+                }
+
+                Check("the wait before the click stays between 100 and 300ms",
+                    withinRange, $"[{min}, {max}]");
+
+                Check("the production default is the upper bound of that range",
+                    WowProcess.LootDelay == LootDelayMaximum,
+                    $"LootDelay is {WowProcess.LootDelay}ms");
+            }
+
+            Console.WriteLine("=== the click never comes later than it used to be ===");
             {
                 // The time from the fish biting to the click reaching the game is
                 // the lookup of the float, then the rest of the reaction time, then
@@ -60,7 +96,7 @@ namespace FishingFun
                     int reaction = timing.LootReactionMs();
                     int lookup = 150;
                     int actualReaction = Math.Max(0, reaction - lookup);
-                    int total = lookup + actualReaction + LootDelay;
+                    int total = lookup + actualReaction + LootDelayMaximum;
 
                     if (reaction > worstReaction) worstReaction = reaction;
                     if (total > worstTotal) worstTotal = total;
@@ -85,7 +121,7 @@ namespace FishingFun
                     {
                         int reaction = timing.LootReactionMs();
                         int actualReaction = Math.Max(0, reaction - lookup);
-                        int total = lookup + actualReaction + LootDelay;
+                        int total = lookup + actualReaction + LootDelayMaximum;
                         if (total > worst) worst = total;
                         if (total > OldWorstCase) withinLimit = false;
                     }
@@ -102,11 +138,11 @@ namespace FishingFun
                 int lookup = 1500;
                 int reaction = 900;
                 int actualReaction = Math.Max(0, reaction - lookup);
-                int total = lookup + actualReaction + LootDelay;
+                int total = lookup + actualReaction + LootDelayMaximum;
 
                 Check("a lookup longer than the reaction is noticed",
-                    total > OldWorstCase,
-                    $"the click would be {total}ms, which is outside the budget of {OldWorstCase}ms");
+                    total > WorstCase,
+                    $"the click would be {total}ms, which is outside the budget of {WorstCase}ms");
                 Check("the click still happens straight away when the budget is gone",
                     actualReaction == 0);
             }
@@ -120,12 +156,12 @@ namespace FishingFun
                 for (int i = 0; i < 5000; i++)
                 {
                     int reaction = timing.LootReactionMs();
-                    int total = 0 + reaction + LootDelay;
-                    if (total < 700 + LootDelay || total > 1120 + LootDelay) withinRange = false;
+                    int total = 0 + reaction + LootDelayMaximum;
+                    if (total < 700 + LootDelayMaximum || total > 1120 + LootDelayMaximum) withinRange = false;
                 }
 
                 Check("the click is between the shortest and longest reaction",
-                    withinRange, $"between {700 + LootDelay}ms and {1120 + LootDelay}ms");
+                    withinRange, $"between {700 + LootDelayMaximum}ms and {1120 + LootDelayMaximum}ms");
             }
 
             Console.WriteLine();

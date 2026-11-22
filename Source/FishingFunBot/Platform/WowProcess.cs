@@ -138,20 +138,24 @@ namespace FishingFun
         private const int VK_RBUTTON = 0x02;
 
         /// <summary>
-        /// Time in milliseconds to wait after the cursor has been moved onto the bobber and
-        /// before the right mouse button is pressed.
+        /// The longest time to wait after the cursor has been moved onto the
+        /// bobber and before the right mouse button is pressed.
         /// 
-        /// The game rotates the camera when it sees the mouse move while the right mouse
-        /// button is down. Moving the cursor generates a mouse move message that the game
-        /// reads on one of its own frames, so the cursor has to be moved and the game given
-        /// time to read that movement before the button is pressed. If the game reads the
-        /// movement while the button is down it applies it as a camera rotation and the
-        /// view swings away from the bobber.
+        /// The game rotates the camera when it sees the mouse move while the right
+        /// mouse button is down. Moving the cursor generates a mouse move message
+        /// that the game reads on one of its own frames, so the cursor has to be
+        /// moved and the game given time to read that movement before the button
+        /// is pressed. If the game reads the movement while the button is down it
+        /// applies it as a camera rotation and the view swings away from the
+        /// bobber.
+        /// 
+        /// The cursor has usually been on the bobber for a while, so the wait is
+        /// short. A random value between 100ms and this maximum is used.
         /// 
         /// Raise this value if the camera still moves. See issue #44 "Camera going wild"
         /// and the discussion on issue #13.
         /// </summary>
-        public static int LootDelay = 1000;
+        public static int LootDelay = 300;
 
         /// <summary>
         /// Builds the lParam for a mouse message from a screen position. The mouse
@@ -314,7 +318,7 @@ namespace FishingFun
                     // it sees the mouse move while the right mouse button is down, which is
                     // what makes the view swing wildly when the fish bites.
                     MoveCursorTo(position);
-                    Thread.Sleep(LootDelay);
+                    Thread.Sleep(HumanTiming.Current.LootDelayMs(LootDelay));
 
                     ClickWithGuaranteedRelease(
                         () =>

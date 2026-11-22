@@ -54,7 +54,7 @@
 
             <StackPanel Grid.Row="2">
                 <TextBlock TextWrapping="WrapWithOverflow" Name="LabelLootDelay" Text="Label goes here" />
-                <Slider Margin="20 0 10 10" Foreground="Blue" ValueChanged="LootDelay_ValueChanged" Minimum="0" Maximum="3000" TickFrequency="100" Value="{Binding LootDelay}" Thumb.DragCompleted="Slider_DragCompleted" TickPlacement="BottomRight" />
+                <Slider Margin="20 0 10 10" Foreground="Blue" ValueChanged="LootDelay_ValueChanged" Minimum="100" Maximum="3000" TickFrequency="100" Value="{Binding LootDelay}" Thumb.DragCompleted="Slider_DragCompleted" TickPlacement="BottomRight" />
             </StackPanel>
         </Grid>
 
