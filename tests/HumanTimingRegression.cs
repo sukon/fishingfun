@@ -55,10 +55,13 @@ namespace FishingFun
             Console.WriteLine("=== the click on the float is not slower than it used to be ===");
             {
                 // The old behaviour was a 900 to 1125ms wait and then the 1000ms the
-                // camera needs. Anything longer than that loses fish.
+                // camera needs. Anything longer than that loses fish. The wait before
+                // the click is now a random 100 to 300ms, so the worst case is the
+                // worst reaction plus the worst wait.
                 var timing = new HumanTiming(new Random(2), 2.0, true);
                 var reaction = Sample(timing.LootReactionMs, 8000);
-                int worstTotal = reaction.Max() + 1000;
+                var wait = Sample(() => timing.LootDelayMs(300), 8000);
+                int worstTotal = reaction.Max() + wait.Max();
                 Check("the worst case is no slower than the old behaviour",
                     worstTotal <= 2124,
                     $"worst {worstTotal}ms, old worst 2124ms");

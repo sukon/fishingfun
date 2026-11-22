@@ -106,7 +106,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 
 **Path / command:** `Source/FishingFunBot/Bot/HumanTiming.cs`; settings `human_behaviour` and `human_jitter`.
 
-**Use when:** Changing how long the bot waits before casting, how long it takes to react to a bite, or how long a key is held down.
+**Use when:** Changing how long the bot waits before casting, how long it waits before it puts the cursor on the float, how long it takes to react to a bite, or how long a key is held down.
 
 **Usage:** The bot uses these timings instead of fixed ones. The ranges are set so that the click on the float is never later than it was before, because a fish that is not clicked soon enough is lost.
 
@@ -170,7 +170,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 
 **Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
 
-**Notes / constraints:** The lookup of the float happens between the bite and the click, so its cost comes out of the reaction time instead of being added to it. The time from the bite to the click is therefore the larger of the reaction time and the lookup, plus the random 100–300ms the camera needs, so the budget is 1420ms against the 2124ms of the old behaviour. A lookup longer than the whole reaction budget puts the click outside the budget; it cannot be undone, but the bot says so in the log. The pause before casting makes each round longer but cannot make the click on a fish any later.
+**Notes / constraints:** The lookup of the float happens between the bite and the click, so its cost comes out of the reaction time instead of being added to it. The time from the bite to the click is therefore the larger of the reaction time and the lookup, plus the random 100–300ms the camera needs, so the budget is 1420ms with the default `LootDelay` of 300, against the 2124ms of the old behaviour. A lookup longer than the whole reaction budget puts the click outside the budget; it cannot be undone, but the bot says so in the log. The pause before casting makes each round longer but cannot make the click on a fish any later.
 
 ### Building
 
