@@ -189,6 +189,11 @@ namespace FishingFun
         /// </summary>
         private static void MoveCursorTo(System.Drawing.Point position)
         {
+            // Every movement of the cursor goes through here, so this is where the
+            // place the user left the cursor is remembered. It has to happen before
+            // the cursor is moved, otherwise the user cannot get it back.
+            RememberUserCursorPosition();
+
             SetCursorPos(position.X, position.Y);
         }
 
@@ -197,6 +202,24 @@ namespace FishingFun
         /// back when the bot stops.
         /// </summary>
         private static System.Drawing.Point? userCursorPosition;
+
+        /// <summary>
+        /// The place the user left the cursor, for the tests to look at. It is
+        /// null when the bot has not taken the cursor over.
+        /// </summary>
+        internal static System.Drawing.Point? RememberedUserCursorPosition => userCursorPosition;
+
+        /// <summary>
+        /// Remembers where the user left the cursor, so that it can be given
+        /// back when the bot stops. Only the first place is remembered, because
+        /// the cursor may be moved many times after that.
+        /// </summary>
+        private static void RememberUserCursorPosition()
+        {
+            if (userCursorPosition.HasValue) return;
+
+            userCursorPosition = System.Windows.Forms.Cursor.Position;
+        }
 
         /// <summary>
         /// Moves the cursor onto the float, the way a person does before waiting
@@ -209,6 +232,11 @@ namespace FishingFun
         {
             RunUnlessCancelled(() =>
             {
+                // Remember where the user left the cursor before anything is moved.
+                // This has to happen even when the movement below is skipped,
+                // otherwise the cursor could never be given back.
+                RememberUserCursorPosition();
+
                 var wowProcess = Get();
                 if (wowProcess == null) return;
 
@@ -220,13 +248,6 @@ namespace FishingFun
                 // right button is down it treats the movement as a camera
                 // rotation and the view swings away.
                 PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, IntPtr.Zero);
-
-                if (!userCursorPosition.HasValue)
-                {
-                    // Remember where the user left the cursor, so that it can be
-                    // given back when the bot stops.
-                    userCursorPosition = System.Windows.Forms.Cursor.Position;
-                }
 
                 MoveCursorTo(position);
             });
@@ -245,9 +266,17 @@ namespace FishingFun
             lock (InputLock)
             {
                 var original = userCursorPosition;
-                userCursorPosition = null;
                 if (!original.HasValue) return;
-                SetCursorPos(original.Value.X, original.Value.Y);
+
+                if (!SetCursorPos(original.Value.X, original.Value.Y))
+                {
+                    // The cursor could not be moved, for example because the
+                    // desktop is locked. The place is kept, so that it can be
+                    // given back later.
+                    return;
+                }
+
+                userCursorPosition = null;
             }
         }
 

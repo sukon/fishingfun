@@ -215,6 +215,22 @@ namespace FishingFun
             }
 
             Console.WriteLine();
+            Console.WriteLine("=== a stopped bot does not move the cursor ===");
+            {
+                var before = System.Windows.Forms.Cursor.Position;
+
+                // The bot has been asked to stop, so it must not touch the cursor.
+                WowProcess.SetCancellationCheck(() => true);
+                WowProcess.MoveCursorOntoFloat(new Point(60, 80));
+                Check("a stopped bot does not move the cursor",
+                    System.Windows.Forms.Cursor.Position == before);
+                Check("a stopped bot does not take the cursor over",
+                    !WowProcess.RememberedUserCursorPosition.HasValue);
+
+                WowProcess.SetCancellationCheck(null);
+            }
+
+            Console.WriteLine();
             Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILURE(S)");
             return failures == 0 ? 0 : 1;
         }
