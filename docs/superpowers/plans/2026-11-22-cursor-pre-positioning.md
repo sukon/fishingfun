@@ -630,10 +630,19 @@ git commit -m "Wait a random short time before the click on the float"
             {
                 Check("the user is not holding a mouse button",
                     !WowProcess.IsMouseButtonHeldDownByUser());
+
+                // Nothing has been parked on the float, so there is nothing to give
+                // back. This must not move the cursor.
+                var before = System.Windows.Forms.Cursor.Position;
+                WowProcess.RestoreCursor();
+                Check("the cursor is left alone when there is nothing to give back",
+                    System.Windows.Forms.Cursor.Position == before);
             }
 ```
 
-> 這段測試只能在沒有按下滑鼠的環境下執行，CI 與本機皆應成立。
+> `WowProcess.RestoreCursor()` 在沒有記錄過游標位置時必須完全不動作，因此這個測試
+> 不會移動真實游標，可以離線執行。`IsMouseButtonHeldDownByUser()` 反映的是使用者
+> 當下的實體按鍵狀態，此測試成立的前提是執行測試時沒有按下滑鼠鍵。
 
 - [ ] **Step 2: 執行測試確認失敗**
 
