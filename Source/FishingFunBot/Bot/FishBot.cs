@@ -32,7 +32,6 @@ namespace FishingFun
         private int maxFinishingMinutes = 45;
         private int lureTimer = 10;
         private Stopwatch totalTimeStopWatch = new Stopwatch();
-        private Stopwatch stopwatch = new Stopwatch();
         private Stopwatch lureStopwatch = new Stopwatch();
 
         public ConsoleKey RodKey { get => rodKey; set => rodKey = value; }
@@ -105,7 +104,11 @@ namespace FishingFun
                     FishingEventHandler?.Invoke(this, new FishingEvent { Action = FishingAction.Cast });
                     WowProcess.PressKey(castKey);
 
-                    Watch(2000);
+                    // A person waits for the float to land before moving the
+                    // cursor onto it.
+                    int cursorDelay = HumanTiming.Current.CursorMoveDelayMs();
+                    logger.Info($"Waiting {cursorDelay}ms before moving the cursor onto the float.");
+                    WaitWhileEnabled(cursorDelay);
 
                     WaitForBite();
                     checkForStopTimer();
@@ -167,17 +170,6 @@ namespace FishingFun
             this.castKey = castKey;
         }
 
-        private void Watch(int milliseconds)
-        {
-            bobberFinder.Reset();
-            stopwatch.Restart();
-            while (stopwatch.ElapsedMilliseconds < milliseconds)
-            {
-                bobberFinder.Find();
-            }
-            stopwatch.Stop();
-        }
-
         public void Stop()
         {
             stopRequested = true;
@@ -188,6 +180,10 @@ namespace FishingFun
             // held down.
             WowProcess.StopSendingInput();
 
+            // The cursor is put back where the user left it, so that the bot
+            // does not leave the mouse somewhere else.
+            WowProcess.RestoreCursor();
+
             totalTimeStopWatch.Reset();
             logger.Error("Bot is Stopping...");
         }
@@ -195,6 +191,11 @@ namespace FishingFun
         private void WaitForBite()
         {
             bobberFinder.Reset();
+
+            // The cursor is put on the float once it has been seen, and it is
+            // left there, the way a person leaves it. The place it ends up in
+            // is put right before the click.
+            var floatCursor = new FloatCursor();
 
             var timedTask = new TimedAction((a) => { logger.Info("Fishing timed out!"); }, 25 * 1000, 25);
             var observation = FindBobber();
@@ -217,6 +218,12 @@ namespace FishingFun
                 observation = FindBobber();
                 bool isBite = this.biteWatcher.IsBite(observation);
                 trace?.Record(observation, isBite ? "bite" : "watch");
+
+                if (observation.IsVisible && floatCursor.Place(observation.Position, WowProcess.IsMouseButtonHeldDownByUser()))
+                {
+                    logger.Info($"Moving the cursor onto the float at {observation.Position}.");
+                    WowProcess.MoveCursorOntoFloat(observation.Position);
+                }
 
                 if (isBite)
                 {
