@@ -202,10 +202,14 @@ public static void MoveCursorOntoFloat(System.Drawing.Point position)
 | 實際等待 | 固定 1000ms | `random.Next(100, LootDelay + 1)`，即 100 到上限（含）之間的整數 |
 
 `Random.Next(min, max)` 的上界不含，因此用 `Next(100, LootDelay + 1)` 得到的是
-**100 到 LootDelay 之間含兩端**的整數。亂數來源沿用 `WowProcess` 既有的
-`private static Random random`（`WowProcess.cs:19`），並在既有的輸入鎖
-（`InputLock`）內取用，與既有的按鍵按住時長（`WowProcess.cs:335`）同一路徑，
-不會有跨執行緒共用 `Random` 的問題。
+**100 到 LootDelay 之間含兩端**的整數。
+
+亂數來源放在 `HumanTiming`（`HumanTiming.LootDelayMs(int maximum)`），因為該類別
+已經是這個專案裡所有時間決策的集中處，且它不碰 Win32，可以在離線測試中驗證。
+`HumanTiming.Configure()` 只在啟動時呼叫一次（`LoggingSetup.cs:43`），執行期間
+不會被替換，因此沒有跨執行緒共用 `Random` 的問題。`WowProcess.RightClickMouse()`
+在既有的輸入鎖（`InputLock`）內呼叫它，與既有的按鍵按住時長（`WowProcess.cs:335`）
+同一路徑。
 
 滑桿（`Source/FishingFunUI/UI/ColourConfiguration.xaml:57`）的最小值改為 100，
 標籤文字（`ColourConfiguration.xaml.cs:142`）改為說明「在游標移到浮標之後、
