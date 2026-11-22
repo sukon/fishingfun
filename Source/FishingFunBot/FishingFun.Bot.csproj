@@ -62,6 +62,7 @@
     <Compile Include="Bot\BotConfig.cs" />
     <Compile Include="Bot\BotWait.cs" />
     <Compile Include="Bot\FishBot.cs" />
+    <Compile Include="Bot\FloatCursor.cs" />
     <Compile Include="Bot\FishingFunSettings.cs" />
     <Compile Include="Bot\HumanTiming.cs" />
     <Compile Include="Bot\Interfaces\IBiteWatcher.cs" />
