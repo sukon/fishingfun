@@ -12,6 +12,7 @@
 | Raw image capture and inspection | Live/offline detector diagnostic | `tools/Inspect-Bobber.ps1`, `tools/BobberDiagnostic.cs` | Read-only capture; raw pixels, overlays and rejection report |
 | Release build | Restore packages and MSBuild | `tools/Build-Release.ps1` | Downloads project-local .NET Framework 4.7.2 reference assemblies |
 | Bot safety regression | Stopping, input release and click position | `tests/Run-BotSafetyRegression.ps1` | No game or restored packages required |
+| Cursor behaviour regression | The cursor is put on the float once per cast | `tests/Run-CursorBehaviourRegression.ps1` | No game or restored packages required |
 | Loot latency regression | Click is no later than it used to be | `tests/Run-LootLatencyRegression.ps1` | No game or restored packages required |
 
 ## Tools and Procedures
@@ -135,6 +136,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 
 **Notes / constraints:** The mouse button is released in a finally block, so a failure in between cannot leave the button held down without trying to release it. If the release itself fails the failure is reported and the exception is not swallowed. The stop check is made after the input lock has been taken, so an action queued up before the bot was stopped does not go through, and stopping the bot waits for anything that is being sent so that no new action can start once the stop has finished.
 
+### Cursor behaviour
+
+**Purpose:** Check that the cursor is put on the float once per cast, that the float drifting does not move it again, and that it is not moved while the user is holding a mouse button down.
+
+**Path / command:** `tests/Run-CursorBehaviourRegression.ps1`
+
+**Use when:** Changing when the cursor is moved onto the float, or what stops it from being moved.
+
+**Usage:** `powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-CursorBehaviourRegression.ps1`
+
+**Inputs / arguments:** None.
+
+**Outputs:** PASS/FAIL lines and nonzero exit on failure.
+
+**Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
+
+**Notes / constraints:** The cursor is left on the float while the bot waits, the way a person leaves it. The place the float ends up in is put right before the click, which is the existing behaviour of `LootPosition.Choose`. A person is holding a mouse button down, the cursor is not moved and the float is not marked as placed, so it is put on the float on a later frame.
+
 ### Click latency
 
 **Purpose:** Check that the click on the float never comes later than it used to.
@@ -151,7 +170,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 
 **Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
 
-**Notes / constraints:** The lookup of the float happens between the bite and the click, so its cost comes out of the reaction time instead of being added to it. The time from the bite to the click is therefore the larger of the reaction time and the lookup, plus the 1000ms the camera needs, so the budget is 2120ms against the 2124ms of the old behaviour. A lookup longer than the whole reaction budget puts the click outside the budget; it cannot be undone, but the bot says so in the log. The pause before casting makes each round longer but cannot make the click on a fish any later.
+**Notes / constraints:** The lookup of the float happens between the bite and the click, so its cost comes out of the reaction time instead of being added to it. The time from the bite to the click is therefore the larger of the reaction time and the lookup, plus the random 100–300ms the camera needs, so the budget is 1420ms against the 2124ms of the old behaviour. A lookup longer than the whole reaction budget puts the click outside the budget; it cannot be undone, but the bot says so in the log. The pause before casting makes each round longer but cannot make the click on a fish any later.
 
 ### Building
 
