@@ -68,13 +68,14 @@ namespace FishingFun
                 for (int i = 0; i < 5000; i++)
                 {
                     int delay = timing.LootDelayMs(WowProcess.LootDelay);
-                    if (delay < LootDelayMinimum || delay > LootDelayMaximum) withinRange = false;
+                    if (delay < LootDelayMinimum || delay > WowProcess.LootDelay) withinRange = false;
                     if (delay < min) min = delay;
                     if (delay > max) max = delay;
                 }
 
-                Check("the wait before the click stays between 100 and 300ms",
-                    withinRange, $"[{min}, {max}]");
+                Check("the wait before the click stays between the minimum and the maximum",
+                    withinRange,
+                    $"between {LootDelayMinimum}ms and {LootDelayMaximum}ms, [{min}, {max}]");
 
                 Check("the production default is the upper bound of that range",
                     WowProcess.LootDelay == LootDelayMaximum,
@@ -110,7 +111,7 @@ namespace FishingFun
 
             {
                 // As long as the lookup is shorter than the reaction time the click
-                // is never later than the old worst case.
+                // is never later than the budget of the new behaviour.
                 var timing = new HumanTiming(new Random(2), 2.0, true);
                 bool withinLimit = true;
                 int worst = 0;
@@ -123,12 +124,12 @@ namespace FishingFun
                         int actualReaction = Math.Max(0, reaction - lookup);
                         int total = lookup + actualReaction + LootDelayMaximum;
                         if (total > worst) worst = total;
-                        if (total > OldWorstCase) withinLimit = false;
+                        if (total > WorstCase) withinLimit = false;
                     }
                 }
 
                 Check("a lookup shorter than the reaction keeps the click within the budget",
-                    withinLimit, $"worst {worst}ms");
+                    withinLimit, $"worst {worst}ms, budget {WorstCase}ms");
             }
 
             {

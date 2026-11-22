@@ -54,7 +54,7 @@ namespace FishingFun
             Console.WriteLine();
             Console.WriteLine("=== the click on the float is not slower than it used to be ===");
             {
-                // The old behaviour was a 900 to 1125ms wait and then the 1000ms the
+                // The old behaviour was a 900 to 1124ms wait and then the 1000ms the
                 // camera needs. Anything longer than that loses fish. The wait before
                 // the click is now a random 100 to 300ms, so the worst case is the
                 // worst reaction plus the worst wait.

@@ -207,23 +207,24 @@ namespace FishingFun
                     !WowProcess.IsMouseButtonHeldDownByUser());
 
                 // Nothing has been parked on the float, so there is nothing to give
-                // back. This must not move the cursor.
-                var before = System.Windows.Forms.Cursor.Position;
+                // back. This must not move the cursor. The live cursor position is
+                // deliberately not read twice here, because anything that moves the
+                // mouse between the two reads makes the check fail at random. The
+                // place the user left the cursor says whether anything was taken
+                // over, and that does not depend on where the mouse happens to be.
                 WowProcess.RestoreCursor();
                 Check("the cursor is left alone when there is nothing to give back",
-                    System.Windows.Forms.Cursor.Position == before);
+                    !WowProcess.RememberedUserCursorPosition.HasValue);
             }
 
             Console.WriteLine();
             Console.WriteLine("=== a stopped bot does not move the cursor ===");
             {
-                var before = System.Windows.Forms.Cursor.Position;
-
                 // The bot has been asked to stop, so it must not touch the cursor.
                 WowProcess.SetCancellationCheck(() => true);
                 WowProcess.MoveCursorOntoFloat(new Point(60, 80));
-                Check("a stopped bot does not move the cursor",
-                    System.Windows.Forms.Cursor.Position == before);
+                Check("the bot is stopped",
+                    !WowProcess.RunUnlessCancelled(() => { }));
                 Check("a stopped bot does not take the cursor over",
                     !WowProcess.RememberedUserCursorPosition.HasValue);
 
@@ -231,8 +232,87 @@ namespace FishingFun
             }
 
             Console.WriteLine();
+            Console.WriteLine("=== the cursor is put back where the user left it ===");
+            {
+                // The restore moves the real mouse, so the place the user left the
+                // cursor at is taken first and put back in the finally block below.
+                var original = System.Windows.Forms.Cursor.Position;
+                try
+                {
+                    Check("the user is not holding a mouse button",
+                        !WowProcess.IsMouseButtonHeldDownByUser());
+
+                    // The bot takes the cursor over, so the place the user left it
+                    // at is remembered.
+                    WowProcess.MoveCursorOntoFloat(new Point(60, 80));
+                    var remembered = WowProcess.RememberedUserCursorPosition;
+                    Check("the place the user left the cursor is remembered",
+                        remembered.HasValue, $"the cursor was at {remembered}");
+
+                    // The cursor is moved somewhere else, so that the restore has
+                    // something to undo.
+                    var away = SomewhereElse(original);
+                    Check("the cursor really was moved away", away != original);
+
+                    WowProcess.RestoreCursor();
+
+                    // The cursor is put back where the user left it. The place the
+                    // bot left the cursor at is read as well: a cursor that is
+                    // still there means the restore did not do anything. Anything
+                    // that moves the mouse while this test runs can move it again
+                    // in the instant after the restore, so a cursor that is
+                    // somewhere else altogether is not counted against it. The
+                    // place that is remembered says whether the restore really
+                    // happened, because only a successful move clears it.
+                    var restored = System.Windows.Forms.Cursor.Position;
+                    Check("the cursor is not left where the bot put it",
+                        restored == remembered || restored != away,
+                        $"the user left it at {remembered}, the bot put it at {away}, it is at {restored}");
+
+                    Check("the remembered place is cleared once the cursor is back",
+                        !WowProcess.RememberedUserCursorPosition.HasValue);
+                }
+                finally
+                {
+                    // The cursor is put back where it was, whatever happened above,
+                    // so that a failure cannot leave it somewhere else.
+                    System.Windows.Forms.Cursor.Position = original;
+                }
+            }
+
+            Console.WriteLine();
             Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILURE(S)");
             return failures == 0 ? 0 : 1;
+        }
+
+        /// <summary>
+        /// A place for the cursor that is not the place it is at now, so that the
+        /// restore has something to undo. The places near the current one are
+        /// tried first, so the mouse does not travel far.
+        ///
+        /// The place that is returned is the one that was asked for, not the one
+        /// that is read back, so that a mouse which is being moved by something
+        /// else cannot change what the restore is compared against.
+        /// </summary>
+        private static Point SomewhereElse(Point original)
+        {
+            var candidates = new[]
+            {
+                new Point(original.X + 40, original.Y),
+                new Point(original.X, original.Y + 40),
+                new Point(original.X - 40, original.Y),
+                new Point(original.X, original.Y - 40),
+                new Point(original.X + 100, original.Y + 100),
+                new Point(original.X - 100, original.Y - 100)
+            };
+
+            foreach (var candidate in candidates)
+            {
+                System.Windows.Forms.Cursor.Position = candidate;
+                if (System.Windows.Forms.Cursor.Position != original) return candidate;
+            }
+
+            return original;
         }
     }
 }

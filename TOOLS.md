@@ -13,6 +13,7 @@
 | Release build | Restore packages and MSBuild | `tools/Build-Release.ps1` | Downloads project-local .NET Framework 4.7.2 reference assemblies |
 | Bot safety regression | Stopping, input release and click position | `tests/Run-BotSafetyRegression.ps1` | No game or restored packages required |
 | Cursor behaviour regression | The cursor is put on the float once per cast | `tests/Run-CursorBehaviourRegression.ps1` | No game or restored packages required |
+| Cursor wiring regression | The bot parks the cursor and gives it back | `tests/Run-CursorWiringRegression.ps1` | No game or restored packages required |
 | Loot latency regression | Click is no later than it used to be | `tests/Run-LootLatencyRegression.ps1` | No game or restored packages required |
 
 ## Tools and Procedures
@@ -116,7 +117,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 
 **Requirements:** None beyond the program itself.
 
-**Notes / constraints:** Switching the behaviour off gives back the old random behaviour, not a set of fixed times, so nothing else about the bot changes. The values are skewed towards the short end of each range, because most people react quickly and a few are slow. The seed is only set by the tests, so two runs do not follow the same sequence. The curved cursor path was considered and left out of this round.
+**Notes / constraints:** Switching the behaviour off gives back the old random behaviour, not a set of fixed times: every wait except the one before the cursor is moved onto the float stays random. That one wait becomes a fixed 1200ms, because the game needs that long for the float to land. The values are skewed towards the short end of each range, because most people react quickly and a few are slow. The seed is only set by the tests, so two runs do not follow the same sequence. The curved cursor path was considered and left out of this round.
 
 ### Bot safety
 
@@ -153,6 +154,24 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/Inspect-Bobber.ps1 -Ou
 **Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
 
 **Notes / constraints:** The cursor is left on the float while the bot waits, the way a person leaves it. The place the float ends up in is put right before the click, which is the existing behaviour of `LootPosition.Choose`. A person is holding a mouse button down, the cursor is not moved and the float is not marked as placed, so it is put on the float on a later frame.
+
+### Cursor wiring
+
+**Purpose:** Check that the bot really puts the cursor on the float and gives it back when it stops, and that the wait before the click is the random one.
+
+**Path / command:** `tests/Run-CursorWiringRegression.ps1`
+
+**Use when:** Changing when the bot starts and stops, or what it does with the cursor.
+
+**Usage:** `powershell -NoProfile -ExecutionPolicy Bypass -File tests/Run-CursorWiringRegression.ps1`
+
+**Inputs / arguments:** The repository root is passed to the test, so that it can look at the source of the click.
+
+**Outputs:** PASS/FAIL lines and nonzero exit on failure.
+
+**Requirements:** Windows .NET Framework and the Visual Studio 2022 C# compiler.
+
+**Notes / constraints:** The bot is run for real, but without a game, until it has seen the float. It applies the lure before it looks, so the test takes about twenty seconds. The wait before the click only happens when a game is running, so that one is checked in the source instead.
 
 ### Click latency
 

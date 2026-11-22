@@ -87,11 +87,11 @@ namespace FishingFun
         }
 
         /// <summary>
-        /// Time to wait after the right mouse button has been released before the cursor is
-        /// moved back to where the user left it. The game samples the mouse position once
-        /// per frame, so moving the cursor in the same frame as the button release makes the
-        /// game apply that movement as a look (camera rotation) while the right button is
-        /// still considered to be down.
+        /// Time to wait after the right mouse button has been released before the focus is
+        /// taken back. The game samples the mouse position once per frame, so anything that
+        /// moves the cursor in the same frame as the button release is applied as a look
+        /// (camera rotation) while the right button is still considered to be down. The
+        /// wait gives the game that frame to get through before anything else is sent.
         /// </summary>
         private const int CursorRestoreDelayMs = 150;
 
@@ -260,6 +260,12 @@ namespace FishingFun
         /// already stopped by the time this is called and the cursor still has
         /// to be given back. It is the same reason the mouse button is always
         /// let go.
+        ///
+        /// The restore is left until the user lets go of the mouse button. The
+        /// game reads a mouse movement while the right button is down as a
+        /// camera rotation, which is the thing this whole change is about
+        /// avoiding. The place the user left the cursor is kept, so that it can
+        /// be given back later.
         /// </summary>
         public static void RestoreCursor()
         {
@@ -267,6 +273,11 @@ namespace FishingFun
             {
                 var original = userCursorPosition;
                 if (!original.HasValue) return;
+
+                // The user is holding a mouse button down, so the game is getting
+                // real input from them. Moving the cursor now is not safe, and it
+                // is not what the user expects at this moment either.
+                if (IsMouseButtonHeldDownByUser()) return;
 
                 if (!SetCursorPos(original.Value.X, original.Value.Y))
                 {
