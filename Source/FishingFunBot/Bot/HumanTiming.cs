@@ -95,6 +95,41 @@ namespace FishingFun
         }
 
         /// <summary>
+        /// The wait after casting and before the cursor is moved onto the float.
+        /// 
+        /// A person waits for the float to land before putting the cursor on it.
+        /// The float lands about a second after the cast, so the wait is never
+        /// shorter than that.
+        /// 
+        /// The wait is still there when the human behaviour is switched off,
+        /// because the game needs the float to land. It is not a human timing
+        /// then, so it is a fixed value.
+        /// </summary>
+        public int CursorMoveDelayMs()
+        {
+            if (!Enabled) return 1200;
+            return Skewed(700, 2200, 1.4);
+        }
+
+        /// <summary>
+        /// The wait between moving the cursor onto the float and pressing the
+        /// right mouse button.
+        /// 
+        /// The game reads the mouse position once a frame, so it needs a moment
+        /// to see where the cursor is now. The cursor has usually been on the
+        /// float for a while, so the wait is short. It is picked at random
+        /// between the minimum and the maximum.
+        /// 
+        /// This is not a human timing, so it stays random when the human
+        /// behaviour is switched off.
+        /// </summary>
+        public int LootDelayMs(int maximum)
+        {
+            int upper = Math.Max(100, maximum);
+            return 100 + random.Next(upper - 100 + 1);
+        }
+
+        /// <summary>
         /// Picks a value from the range, with most of the values towards the short end.
         /// 
         /// The shape is a power of a uniform number. A shape above one pulls the

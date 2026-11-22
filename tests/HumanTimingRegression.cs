@@ -151,6 +151,46 @@ namespace FishingFun
             }
 
             Console.WriteLine();
+            Console.WriteLine("=== the cursor is moved onto the float after a wait ===");
+            {
+                var timing = new HumanTiming(new Random(11), 1.0, true);
+
+                var cursorDelay = Sample(timing.CursorMoveDelayMs, 4000);
+                Check("the wait before moving the cursor stays in range",
+                    cursorDelay.All(v => v >= 700 && v <= 2200),
+                    $"[{cursorDelay.Min()}, {cursorDelay.Max()}]");
+
+                var strong = new HumanTiming(new Random(13), 2.0, true);
+                Check("a strong setting cannot push the wait past its range",
+                    Sample(strong.CursorMoveDelayMs, 4000).All(v => v >= 700 && v <= 2200));
+
+                var off = new HumanTiming(new Random(12), 1.0, false);
+                Check("the float is still given time to land when it is off",
+                    Sample(off.CursorMoveDelayMs, 500).All(v => v == 1200));
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("=== the wait before the click is short and random ===");
+            {
+                var timing = new HumanTiming(new Random(14), 1.0, true);
+
+                var delays = Sample(() => timing.LootDelayMs(300), 4000);
+                Check("the wait before the click stays between 100 and 300ms",
+                    delays.All(v => v >= 100 && v <= 300),
+                    $"[{delays.Min()}, {delays.Max()}]");
+                Check("the wait before the click is not always the same",
+                    delays.Distinct().Count() > 100,
+                    $"{delays.Distinct().Count()} different values");
+
+                Check("a maximum below the minimum still gives the minimum",
+                    timing.LootDelayMs(10) == 100);
+
+                var off = new HumanTiming(new Random(15), 1.0, false);
+                Check("the wait before the click is random even when the human behaviour is off",
+                    Sample(() => off.LootDelayMs(300), 2000).Distinct().Count() > 100);
+            }
+
+            Console.WriteLine();
             Console.WriteLine("=== a bad strength is handled ===");
             {
                 Check("a strength that is not a number keeps the default",
