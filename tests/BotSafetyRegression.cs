@@ -201,6 +201,20 @@ namespace FishingFun
             }
 
             Console.WriteLine();
+            Console.WriteLine("=== the cursor is only moved when the user is not holding a button ===");
+            {
+                Check("the user is not holding a mouse button",
+                    !WowProcess.IsMouseButtonHeldDownByUser());
+
+                // Nothing has been parked on the float, so there is nothing to give
+                // back. This must not move the cursor.
+                var before = System.Windows.Forms.Cursor.Position;
+                WowProcess.RestoreCursor();
+                Check("the cursor is left alone when there is nothing to give back",
+                    System.Windows.Forms.Cursor.Position == before);
+            }
+
+            Console.WriteLine();
             Console.WriteLine(failures == 0 ? "ALL PASS" : failures + " FAILURE(S)");
             return failures == 0 ? 0 : 1;
         }

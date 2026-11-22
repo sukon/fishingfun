@@ -171,10 +171,11 @@ namespace FishingFun
         }
 
         /// <summary>
-        /// True when the user is physically holding a mouse button down. Injecting a
-        /// click at the same time as real input confuses the game.
+        /// True when the user is physically holding a mouse button down.
+        /// Injecting a click or a movement at the same time as real input
+        /// confuses the game.
         /// </summary>
-        private static bool IsMouseButtonHeldDown()
+        public static bool IsMouseButtonHeldDownByUser()
         {
             const short keyDownMask = unchecked((short)0x8000);
 
@@ -189,6 +190,65 @@ namespace FishingFun
         private static void MoveCursorTo(System.Drawing.Point position)
         {
             SetCursorPos(position.X, position.Y);
+        }
+
+        /// <summary>
+        /// Where the user left the cursor before the bot moved it. It is put
+        /// back when the bot stops.
+        /// </summary>
+        private static System.Drawing.Point? userCursorPosition;
+
+        /// <summary>
+        /// Moves the cursor onto the float, the way a person does before waiting
+        /// for the fish to bite. The cursor is left there.
+        ///
+        /// The movement must not happen while the right mouse button is down,
+        /// because the game treats that as a camera rotation.
+        /// </summary>
+        public static void MoveCursorOntoFloat(System.Drawing.Point position)
+        {
+            RunUnlessCancelled(() =>
+            {
+                var wowProcess = Get();
+                if (wowProcess == null) return;
+
+                // The user is holding a mouse button down, so the game is getting
+                // real input from them. Moving the cursor now is not safe.
+                if (IsMouseButtonHeldDownByUser()) return;
+
+                // Send a button up before moving. If the game still thinks the
+                // right button is down it treats the movement as a camera
+                // rotation and the view swings away.
+                PostMessage(wowProcess.MainWindowHandle, Keys.WM_RBUTTONUP, Keys.VK_RMB, IntPtr.Zero);
+
+                if (!userCursorPosition.HasValue)
+                {
+                    // Remember where the user left the cursor, so that it can be
+                    // given back when the bot stops.
+                    userCursorPosition = System.Windows.Forms.Cursor.Position;
+                }
+
+                MoveCursorTo(position);
+            });
+        }
+
+        /// <summary>
+        /// Puts the cursor back where the user left it.
+        ///
+        /// This does not go through RunUnlessCancelled, because the bot has
+        /// already stopped by the time this is called and the cursor still has
+        /// to be given back. It is the same reason the mouse button is always
+        /// let go.
+        /// </summary>
+        public static void RestoreCursor()
+        {
+            lock (InputLock)
+            {
+                var original = userCursorPosition;
+                userCursorPosition = null;
+                if (!original.HasValue) return;
+                SetCursorPos(original.Value.X, original.Value.Y);
+            }
         }
 
         [DllImport("user32.dll")]
@@ -298,13 +358,11 @@ namespace FishingFun
                     // If the user is holding a mouse button down the game is getting real
                     // input from them. Mixing that with an injected click makes the game
                     // behave unpredictably, so skip the click in that case.
-                    if (IsMouseButtonHeldDown())
+                    if (IsMouseButtonHeldDownByUser())
                     {
                         logger.Info("Mouse button is held down by the user, skipping the loot click.");
                         return;
                     }
-
-                    var oldPosition = System.Windows.Forms.Cursor.Position;
 
                     var lParam = MakeClickLParam(wowProcess.MainWindowHandle, position);
 
@@ -342,7 +400,7 @@ namespace FishingFun
                     // moved back, otherwise that movement is also seen as a camera rotation.
                     Thread.Sleep(CursorRestoreDelayMs);
 
-                    RefocusOnOldScreen(logger, activeProcess, wowProcess, oldPosition);
+                    RefocusOnOldScreen(logger, activeProcess, wowProcess);
                 }
             });
         }
@@ -360,7 +418,7 @@ namespace FishingFun
             }
         }
 
-        private static void RefocusOnOldScreen(ILog logger, Process activeProcess, Process wowProcess, System.Drawing.Point oldPosition)
+        private static void RefocusOnOldScreen(ILog logger, Process activeProcess, Process wowProcess)
         {
             try
             {
@@ -374,10 +432,6 @@ namespace FishingFun
                     KeyDown(ConsoleKey.Escape);
                     Thread.Sleep(30);
                     KeyUp(ConsoleKey.Escape);
-
-                    // Move the cursor back only after the button release has been processed,
-                    // otherwise that movement is also seen as a camera rotation.
-                    MoveCursorTo(oldPosition);
                 }
             }
             catch (Exception ex)
